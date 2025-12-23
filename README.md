@@ -1,20 +1,24 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# 🍕 PizzaFlow - Sistema de Gestión para Pizzerías (POS + KDS)
 
-# Run and deploy your AI Studio app
+## 📋 Descripción
+Sistema integral para la gestión gastronómica desarrollado con tecnologías modernas. Permite tomar pedidos en tiempo real, gestionar la comanda en cocina, administrar usuarios con roles (Admin, Cajero, Cocinero) y visualizar métricas de ventas.
 
-This contains everything you need to run your app locally.
+## 🚀 Tecnologías Utilizadas
+* **Frontend:** React + TypeScript + Vite
+* **Estilos:** Tailwind CSS (Diseño Responsive & Mobile First)
+* **Backend / Base de Datos:** Supabase (PostgreSQL)
+* **Autenticación:** Supabase Auth
+* **Despliegue:** Netlify
 
-View your app in AI Studio: https://ai.studio/apps/temp/1
+## ✨ Funcionalidades Principales
+* 🛒 **Punto de Venta (POS):** Carrito dinámico, buscador de clientes y cálculo automático de promociones.
+* 👨‍🍳 **Kitchen Display System (KDS):** Pantalla de cocina en tiempo real que se actualiza automáticamente al entrar un pedido.
+* 📱 **Modo Móvil:** Interfaz optimizada para celulares (camareros) con navegación tipo App nativa.
+* 🔐 **Roles y Permisos:** Sistema de seguridad donde los cajeros no pueden ver métricas de administración.
+* 📊 **Dashboard:** Métricas de ventas y gestión de inventario.
 
-## Run Locally
+## 🔗 Demo en Vivo
+Puedes probar la aplicación aquí: [https://pizzaflow-sistema-admin.netlify.app](https://pizzaflow-sistema-admin.netlify.app)
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+---
+Desarrollado por Martin Diaz
