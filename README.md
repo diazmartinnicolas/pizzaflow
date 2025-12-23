@@ -8,7 +8,7 @@ Sistema integral para la gestión gastronómica desarrollado con tecnologías mo
 * **Estilos:** Tailwind CSS (Diseño Responsive & Mobile First)
 * **Backend / Base de Datos:** Supabase (PostgreSQL)
 * **Autenticación:** Supabase Auth
-* **Despliegue:** Netlify
+* **Despliegue:** Vercel
 
 ## ✨ Funcionalidades Principales
 * 🛒 **Punto de Venta (POS):** Carrito dinámico, buscador de clientes y cálculo automático de promociones.
