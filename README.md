@@ -18,7 +18,7 @@ Sistema integral para la gestión gastronómica desarrollado con tecnologías mo
 * 📊 **Dashboard:** Métricas de ventas y gestión de inventario.
 
 ## 🔗 Demo en Vivo
-Puedes probar la aplicación aquí: [https://pizzaflow-sistema-admin.netlify.app](https://pizzaflow-sistema-admin.netlify.app)
+Puedes probar la aplicación aquí:(https://pizzaflow-nu.vercel.app/)
 
 ---
 Desarrollado por Martin Diaz
