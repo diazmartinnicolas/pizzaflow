@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ViewState, UserRole } from '../types';
 import { useApp } from '../context/AppContext';
+import { RegisterUser } from './RegisterUser';
 import { 
   LayoutDashboard, 
   ShoppingCart, 
@@ -13,6 +14,28 @@ import {
   TicketPercent,
   Download
 } from 'lucide-react';
+
+export const AdminPanel = () => {
+  const [showRegister, setShowRegister] = useState(false);
+
+  return (
+    <div>
+      {/* Botón para abrir el modal */}
+      <button 
+        onClick={() => setShowRegister(true)}
+        className="bg-green-600 text-white px-4 py-2 rounded flex gap-2"
+      >
+        + Nuevo Empleado
+      </button>
+
+      {/* El Modal solo se muestra si showRegister es true */}
+      {showRegister && (
+        <RegisterUser onClose={() => setShowRegister(false)} />
+      )}
+    </div>
+  );
+};
+
 
 interface SidebarProps {
   currentView: ViewState;

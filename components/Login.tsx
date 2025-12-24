@@ -1,118 +1,130 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
-import { Pizza, Loader2, UserPlus, LogIn } from 'lucide-react';
+import { Pizza, ChefHat, ArrowRight, Lock } from 'lucide-react';
 
-export default function Login() {
+export const Login = () => {
+  const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  
-  // Nuevo estado para saber si está intentando entrar o registrarse
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // CORRECCIÓN AQUÍ: Cambiamos "React.FormEvent" por "any" para evitar errores
-  const handleSubmit = async (e: any) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
-    if (isRegistering) {
-      // --- MODO REGISTRO ---
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-      });
-
-      if (error) {
-        alert("Error al registrarse: " + error.message);
-      } else {
-        if (data.session) {
-          alert("¡Cuenta creada con éxito! Bienvenido al equipo.");
-        } else {
-          alert("¡Cuenta creada! Por favor revisa tu correo para confirmar (si está activada la confirmación).");
-        }
-      }
-    } else {
-      // --- MODO LOGIN (El normal) ---
+    setError(null);
+    try {
       const { error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-
-      if (error) {
-        alert("Error al ingresar: Credenciales incorrectas");
-      }
+      if (error) throw error;
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const handleDemoLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: 'demo@pizzaflow.com', // Asegúrate de haber creado este usuario en Supabase
+        password: 'pizza123',
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      setError("Error al ingresar con la demo: " + error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center p-4">
-      <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md animate-in fade-in zoom-in-95 duration-300">
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+      <div className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-gray-700">
         
-        <div className="flex justify-center mb-6">
-          <div className="bg-orange-100 p-4 rounded-full">
-            <Pizza size={48} className="text-orange-600" />
+        {/* Header */}
+        <div className="bg-orange-600 p-8 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="bg-white p-3 rounded-full shadow-lg">
+              <Pizza className="w-10 h-10 text-orange-600" />
+            </div>
           </div>
+          <h1 className="text-3xl font-bold text-white mb-2">PizzaFlow</h1>
+          <p className="text-orange-100">Sistema de Gestión Profesional</p>
         </div>
 
-        <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">PizzaFlow</h1>
-        <p className="text-center text-gray-500 mb-8">
-          {isRegistering ? 'Crear cuenta de empleado' : 'Gestión de Pizzería'}
-        </p>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-            <input
-              type="email"
-              required
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-              placeholder="tu@email.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
-            <input
-              type="password"
-              required
-              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-orange-600 text-white font-bold py-3 rounded-lg hover:bg-orange-700 transition-all flex items-center justify-center gap-2 shadow-lg hover:shadow-xl active:scale-95"
-          >
-            {loading ? (
-              <Loader2 className="animate-spin" />
-            ) : isRegistering ? (
-              <> <UserPlus size={20} /> Registrarse </>
-            ) : (
-              <> <LogIn size={20} /> Ingresar </>
+        {/* Body */}
+        <div className="p-8">
+          <form onSubmit={handleLogin} className="space-y-6">
+            
+            {error && (
+              <div className="bg-red-500/10 border border-red-500 text-red-500 p-3 rounded text-sm text-center">
+                {error}
+              </div>
             )}
-          </button>
-        </form>
 
-        <div className="mt-6 text-center border-t pt-4">
-          <p className="text-sm text-gray-600 mb-2">
-            {isRegistering ? '¿Ya tienes cuenta?' : '¿Eres nuevo en el equipo?'}
-          </p>
-          <button 
-            onClick={() => setIsRegistering(!isRegistering)}
-            className="text-orange-600 font-bold hover:text-orange-800 text-sm transition-colors"
+            <div>
+              <label className="block text-gray-400 text-sm font-bold mb-2">Email Corporativo</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg py-3 px-4 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors"
+                placeholder="admin@pizzeria.com"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-400 text-sm font-bold mb-2">Contraseña</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg py-3 px-4 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none transition duration-300 flex items-center justify-center gap-2"
+            >
+              {loading ? 'Cargando...' : (
+                <>
+                  <Lock className="w-4 h-4" /> Iniciar Sesión
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Separador */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-700"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-gray-800 text-gray-500">¿Solo quieres mirar?</span>
+            </div>
+          </div>
+
+          {/* BOTÓN DEMO */}
+          <button
+            onClick={handleDemoLogin}
+            disabled={loading}
+            className="w-full bg-white hover:bg-gray-100 text-gray-900 font-bold py-3 px-4 rounded-lg focus:outline-none transition duration-300 flex items-center justify-center gap-2"
           >
-            {isRegistering ? 'Volver a Iniciar Sesión' : 'Crear una cuenta nueva'}
+             <ChefHat className="w-5 h-5 text-orange-600" />
+             Acceso Demo (Invitado)
+             <ArrowRight className="w-4 h-4 ml-auto text-gray-400" />
           </button>
         </div>
-
       </div>
     </div>
   );
-}
+};
