@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase } from './services/supabase';
+import { supabase } from './services/supabase'; 
+import { logAction } from './services/audit'; 
 import { Login } from './components/Login';
 import Kitchen from './components/Kitchen';
 import Inventory from './components/Inventory';
@@ -8,10 +9,13 @@ import Promotions from './components/Promotions';
 import Users from './components/Users';
 import History from './components/History';
 import Reservations from './components/Reservations';
+
+// Iconos
 import { 
   ShoppingCart, ChefHat, Users as UsersIcon, Package, Percent, 
-  History as HistoryIcon, UserCog, LogOut, MinusCircle, Tag, 
-  UserPlus, Key, X, Search, CalendarClock, Menu, Receipt 
+  History as HistoryIcon, UserCog, LogOut, MinusCircle, 
+  UserPlus, Key, X, Search, CalendarClock, Menu, Receipt,
+  LayoutDashboard, Monitor, Crown, BarChart3, Briefcase, Tag
 } from 'lucide-react';
 
 function App() {
@@ -19,10 +23,11 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<string | null>(null);
 
+  // Navegación
   const [activeTab, setActiveTab] = useState('pos');
   const [selectedCategory, setSelectedCategory] = useState('Todo');
   
-  // VISTA MÓVIL: 'products' o 'cart'
+  // VISTA MÓVIL
   const [mobileView, setMobileView] = useState('products');
 
   // DATOS
@@ -40,46 +45,102 @@ function App() {
   const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
-  const [showMobileMenu, setShowMobileMenu] = useState(false); // Menú hamburguesa móvil
+  const [showMobileMenu, setShowMobileMenu] = useState(false); 
 
-  const categories = ['Todo', 'Pizzas', 'Milanesas', 'Hamburguesas', 'Empanadas', 'Bebidas', 'Postres'];
+  // DETECCIÓN DE MODO DEMO
+  const currentUserEmail = session?.user?.email?.toLowerCase().trim() || '';
+  const isDemo = currentUserEmail.includes('demo');
+
+  // AGREGAMOS 'Promociones' AL FILTRO
+  const categories = ['Todo', 'Promociones', 'Pizzas', 'Milanesas', 'Hamburguesas', 'Empanadas', 'Bebidas', 'Postres'];
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) fetchUserRole(session.user.id);
+      if (session) fetchUserRole(session.user.id, session.user.email);
       else setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
-      if (session) fetchUserRole(session.user.id);
-      else { setUserRole(null); setLoading(false); }
+      
+      if (event === 'SIGNED_IN' && session) {
+          logAction('LOGIN', 'Inicio de sesión exitoso', 'Sistema');
+          fetchUserRole(session.user.id, session.user.email);
+      } else if (!session) {
+          setUserRole(null); 
+          setLoading(false); 
+      }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserRole = async (userId: string) => {
-    const { data } = await supabase.from('profiles').select('role').eq('id', userId).single();
-    if (data) {
-      setUserRole(data.role);
-      if (data.role === 'cocina') setActiveTab('kitchen');
+  const fetchUserRole = async (userId: string, email: string | undefined) => {
+    if (email?.toLowerCase().includes('demo')) {
+        setUserRole('admin');
+        setLoading(false);
+        fetchData(); 
+        return;
+    }
+
+    try {
+        const { data, error } = await supabase.from('profiles').select('role').eq('id', userId).single();
+        
+        if (data) {
+            setUserRole(data.role);
+            if (data.role === 'cocina') setActiveTab('kitchen');
+        } else {
+            setUserRole('cashier'); 
+        }
+    } catch (error) {
+        console.warn("Error rol:", error);
+        setUserRole('cashier');
     }
     fetchData(); 
     setLoading(false);
   };
 
   const fetchData = async () => {
-    const { data: prodData } = await supabase.from('products').select('*').eq('active', true);
-    if (prodData) setProducts(prodData);
-    const { data: promoData } = await supabase.from('promotions').select('*').eq('active', true);
-    if (promoData) setPromotions(promoData);
-    const { data: clientData } = await supabase.from('clients').select('*').order('name');
-    if (clientData) setCustomers(clientData);
+    try {
+        const { data: prodData } = await supabase.from('products').select('*'); 
+        if (prodData) setProducts(prodData);
+
+        const { data: promoData } = await supabase.from('promotions').select('*');
+        if (promoData) setPromotions(promoData);
+
+        const { data: clientData } = await supabase.from('clients').select('*').order('name');
+        
+        let demoIds: string[] = [];
+        try {
+            const { data: profiles } = await supabase.from('profiles').select('id, email');
+            if (profiles) {
+                demoIds = profiles
+                    .filter((p: any) => p.email?.toLowerCase().includes('demo'))
+                    .map((p: any) => p.id);
+            }
+        } catch (e) { 
+            console.warn("No se pudo filtrar demos"); 
+        }
+
+        if (clientData) {
+             const myId = session?.user?.id;
+             let cleanList = clientData;
+
+             if (currentUserEmail.includes('demo')) {
+                cleanList = clientData.filter((c: any) => c.user_id === myId);
+             } else if (demoIds.length > 0) {
+                cleanList = clientData.filter((c: any) => !demoIds.includes(c.user_id));
+             }
+             setCustomers(cleanList);
+        }
+    } catch (error) {
+        console.error("Error fetchData:", error);
+    }
   };
 
   const handleLogout = async () => {
+    await logAction('LOGOUT', 'Usuario cerró sesión', 'Sistema');
     await supabase.auth.signOut();
     window.location.reload(); 
   };
@@ -88,13 +149,43 @@ function App() {
     if (newPassword.length < 6) return alert("Mínimo 6 caracteres.");
     const { error } = await supabase.auth.updateUser({ password: newPassword });
     if (error) alert("Error: " + error.message);
-    else { alert("¡Contraseña actualizada!"); setShowPasswordModal(false); setNewPassword(''); }
+    else { 
+        await logAction('CAMBIO_CLAVE', 'Usuario actualizó su contraseña', 'Sistema');
+        alert("¡Contraseña actualizada!"); 
+        setShowPasswordModal(false); 
+        setNewPassword(''); 
+    }
   };
 
   const addToCart = (product: any) => {
-    setCart([...cart, { ...product, cartId: Date.now() + Math.random() }]);
-    // Opcional: Vibración al agregar en celular
+    setCart(currentCart => [...currentCart, { ...product, cartId: Date.now() + Math.random() }]);
     if (navigator.vibrate) navigator.vibrate(50);
+  };
+
+  // --- NUEVA FUNCIÓN: AGREGAR PROMOCIÓN AL CARRITO ---
+  const handleAddPromotionToCart = (promo: any) => {
+      // 1. Buscar el producto principal
+      const product1 = products.find(p => p.id === promo.product_1_id);
+      if (product1) {
+          addToCart(product1);
+      }
+
+      // 2. Buscar el producto secundario (si existe) o agregar otro del primero (si es 2x1 del mismo)
+      if (promo.product_2_id) {
+          const product2 = products.find(p => p.id === promo.product_2_id);
+          if (product2) {
+              // Pequeño timeout para que tengan IDs de carrito distintos
+              setTimeout(() => addToCart(product2), 50); 
+          }
+      } else {
+          // Si no tiene producto 2, asumimos que es una oferta sobre el producto 1
+          // PERO la lógica actual de promos en 'calculateTotals' suele requerir 2 items para combos.
+          // Si tu lógica de "20% descuento unitario" requiere solo 1 item, esto está bien.
+          // Si es un "2x1" del mismo producto, agregamos otro igual.
+          if (promo.name.toLowerCase().includes('2x1')) {
+               setTimeout(() => addToCart(product1), 50);
+          }
+      }
   };
   
   const removeFromCart = (cartId: number) => setCart(cart.filter(item => item.cartId !== cartId));
@@ -117,6 +208,7 @@ function App() {
             tempCart = tempCart.filter(item => !ids.includes(item.cartId));
           } else break;
         } else {
+          // Lógica para promos de un solo producto (ej: 20% off en una pizza)
           if (index1 !== -1) {
             appliedDiscounts.push({ name: promo.name, amount: tempCart[index1].price * (promo.discount_percentage / 100) });
             const idToRemove = tempCart[index1].cartId;
@@ -129,51 +221,166 @@ function App() {
     return { subtotal, totalDiscount, finalTotal: subtotal - totalDiscount, appliedDiscounts };
   };
 
-  const { finalTotal, subtotal, totalDiscount, appliedDiscounts } = calculateTotals();
+  const { finalTotal, appliedDiscounts } = calculateTotals();
 
+  // --- FUNCIÓN CHECKOUT ---
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     if (!selectedCustomerId) return alert("Selecciona un cliente.");
+    
     setIsProcessing(true);
+
+    // === DEMO ===
+    if (isDemo) {
+        setTimeout(() => {
+            const fakeTicket = Math.floor(Math.random() * 1000) + 1000;
+            const fakeOrder = {
+                id: `demo-${Date.now()}`,
+                ticket_number: fakeTicket,
+                created_at: new Date().toISOString(),
+                client: { name: clientSearchTerm || 'Cliente Demo' },
+                status: 'pendiente',
+                total: finalTotal,
+                order_items: cart.map(item => ({
+                    product: { name: item.name },
+                    quantity: 1 
+                }))
+            };
+
+            const currentDemoOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]');
+            const newDemoOrders = [fakeOrder, ...currentDemoOrders];
+            localStorage.setItem('demo_orders', JSON.stringify(newDemoOrders));
+            window.dispatchEvent(new Event('storage'));
+
+            alert(`¡Ticket #${fakeTicket} SIMULADO y enviado a Cocina!\n(Guardado en memoria local)`);
+            logAction('VENTA', `(Simulada) Ticket #${fakeTicket} - $${finalTotal}`, 'Caja');
+
+            setCart([]);
+            setSelectedCustomerId('');
+            setClientSearchTerm('');
+            setMobileView('products');
+            setIsProcessing(false);
+        }, 800);
+        return; 
+    }
+
+    // === ADMIN ===
+    if (!session || !session.user || !session.user.id) {
+        alert("Error crítico: No se detectó la sesión del usuario.");
+        setIsProcessing(false);
+        return;
+    }
+
     try {
-      const { data: orderData, error: orderError } = await supabase.from('orders').insert([{ client_id: selectedCustomerId, total: finalTotal, status: 'pendiente', payment_type: 'efectivo', created_by: session.user.id }]).select().single();
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert([{ 
+            client_id: selectedCustomerId, 
+            total: finalTotal, 
+            status: 'pendiente', 
+            payment_type: 'efectivo', 
+            user_id: session.user.id 
+        }])
+        .select()
+        .single();
+
       if (orderError) throw orderError;
+
       const itemCounts: any = {};
       cart.forEach(item => { itemCounts[item.id] = (itemCounts[item.id] || 0) + 1; });
+      
       const orderItems = Object.keys(itemCounts).map(productId => {
         const product = products.find(p => p.id === productId);
-        return { order_id: orderData.id, product_id: productId, quantity: itemCounts[productId], price_at_moment: product.price };
+        return { 
+            order_id: orderData.id, 
+            product_id: productId, 
+            quantity: itemCounts[productId], 
+            price_at_moment: product.price 
+        };
       });
-      await supabase.from('order_items').insert(orderItems);
-      alert(`¡Ticket #${orderData.ticket_number} enviado!`);
+      
+      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+      if (itemsError) throw itemsError;
+      
+      await logAction('VENTA', `Ticket #${orderData.ticket_number} - $${finalTotal}`, 'Caja');
+
+      alert(`¡Ticket #${orderData.ticket_number || 'OK'} enviado!`);
       setCart([]);
       setSelectedCustomerId('');
       setClientSearchTerm('');
-      setMobileView('products'); // Volver a productos en móvil
-    } catch (error: any) { alert("Error: " + error.message); } 
-    finally { setIsProcessing(false); }
+      setMobileView('products');
+
+    } catch (error: any) { 
+        console.error("Error al confirmar:", error);
+        alert("Error: " + error.message); 
+    } 
+    finally { 
+        setIsProcessing(false); 
+    }
   };
 
   const handleQuickCustomerCreate = async () => {
     if(!quickCustomerName) return;
-    const { data, error } = await supabase.from('clients').insert([{ name: quickCustomerName }]).select().single();
-    if (error) alert("Error: " + error.message);
-    else {
-      setCustomers([data, ...customers]); 
-      setSelectedCustomerId(data.id);
-      setClientSearchTerm(data.name); 
-      setShowQuickCustomer(false);
-      setQuickCustomerName('');
+    
+    if (isDemo) {
+        const fakeClient = {
+            id: `temp-${Date.now()}`,
+            name: quickCustomerName,
+            user_id: session?.user?.id,
+            created_at: new Date().toISOString()
+        };
+        
+        setCustomers([fakeClient, ...customers]); 
+        setSelectedCustomerId(fakeClient.id);
+        setClientSearchTerm(fakeClient.name); 
+        setShowQuickCustomer(false);
+        setQuickCustomerName('');
+        logAction('CREAR_CLIENTE', `(Simulado) ${quickCustomerName}`, 'Clientes');
+        alert("Cliente Rápido creado en MEMORIA (Modo Demo)");
+        return;
     }
+
+    if (!session || !session.user) return alert("Error de sesión.");
+
+    try {
+        const { data, error } = await supabase.from('clients')
+            .insert([{ 
+                name: quickCustomerName,
+                user_id: session.user.id 
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        await logAction('CREAR_CLIENTE', `Rápido: ${data.name}`, 'Clientes');
+
+        setCustomers([data, ...customers]); 
+        setSelectedCustomerId(data.id);
+        setClientSearchTerm(data.name); 
+        setShowQuickCustomer(false);
+        setQuickCustomerName('');
+        
+    } catch (error: any) {
+        console.error("Error creando cliente:", error);
+        alert("No se pudo crear el cliente: " + error.message);
+    }
+  };
+
+  const getRoleLabel = () => {
+    if (isDemo) return 'Usuario Demo';
+    if (userRole === 'admin') return 'Administrador';
+    if (userRole === 'cashier' || userRole === 'cajero') return 'Cajero';
+    if (userRole === 'cocina') return 'Cocina';
+    return 'Usuario';
   };
 
   const filteredProducts = selectedCategory === 'Todo' ? products : products.filter(p => p.category === selectedCategory);
   const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()));
 
-  if (loading) return <div className="h-dvh flex items-center justify-center">Cargando PizzaFlow...</div>;
+  if (loading) return <div className="h-dvh flex items-center justify-center text-orange-600 font-bold animate-pulse">Cargando PizzaFlow...</div>;
   if (!session) return <Login />;
 
-  // --- VISTA COCINA (Simplificada) ---
   if (userRole === 'cocina') {
     return (
       <div className="h-dvh flex flex-col bg-gray-900">
@@ -186,50 +393,86 @@ function App() {
     );
   }
 
-  // --- LAYOUT PRINCIPAL RESPONSIVE ---
   return (
     <div className="flex h-dvh bg-gray-50 font-sans text-gray-800 overflow-hidden">
       
-      {/* SIDEBAR (Solo Desktop) */}
-      <aside className="w-64 bg-white border-r border-gray-200 flex flex-col justify-between hidden md:flex">
-        {/* ... (Mismo contenido de sidebar desktop que antes) ... */}
+      {/* SIDEBAR DESKTOP */}
+      <aside className="w-64 bg-white border-r border-gray-200 flex-col justify-between hidden md:flex z-50">
         <div>
-          <div className="p-6">
-            <div className="flex items-center gap-2 mb-1">
-              <div className="bg-orange-100 p-2 rounded-full"><span className="text-2xl">🍕</span></div>
-              <h1 className="text-xl font-bold text-orange-600 tracking-tight">PizzaFlow</h1>
+          <div className="p-5 pb-2">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="bg-orange-100 p-2 rounded-full">
+                <PizzaIcon className="w-6 h-6 text-orange-600" />
+              </div>
+              <h1 className="text-xl font-bold text-gray-800 tracking-tight">PizzaFlow</h1>
             </div>
-            <div className="flex justify-between items-center bg-gray-50 p-2 rounded-lg border border-gray-100">
-              <span className="text-xs text-gray-500 uppercase font-bold ml-1">{userRole}</span>
-              <button onClick={() => setShowPasswordModal(true)} className="p-1 text-gray-400 hover:text-orange-600"><Key size={14} /></button>
+
+            <div className={`flex items-center justify-between px-3 py-3 rounded-xl border mb-2 shadow-sm transition-all ${
+              isDemo 
+                ? 'bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200' 
+                : 'bg-white border-gray-200'
+            }`}>
+              <div className="flex flex-col">
+                <span className={`text-[10px] font-extrabold tracking-wider uppercase mb-0.5 ${
+                  isDemo ? 'text-orange-600' : 'text-gray-400'
+                }`}>
+                  {isDemo ? 'MODO VISITA' : 'TU ROL'}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {isDemo ? <Monitor className="w-3.5 h-3.5 text-orange-700" /> : 
+                   userRole === 'admin' ? <Crown className="w-3.5 h-3.5 text-yellow-500" /> :
+                   <Briefcase className="w-3.5 h-3.5 text-blue-500" />}
+                  
+                  <span className={`text-sm font-bold ${
+                    isDemo ? 'text-orange-800' : 'text-gray-800'
+                  }`}>
+                    {getRoleLabel()}
+                  </span>
+                </div>
+              </div>
+
+              {!isDemo && (
+                <button onClick={() => setShowPasswordModal(true)} className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-gray-50 rounded-lg transition-colors">
+                  <Key className="w-4 h-4" /> 
+                </button>
+              )}
             </div>
           </div>
-          <nav className="px-4 space-y-1">
+          
+          <nav className="px-3 space-y-1">
             <SidebarItem icon={<ShoppingCart size={20}/>} label="Punto de Venta" active={activeTab === 'pos'} onClick={() => setActiveTab('pos')} />
             <SidebarItem icon={<ChefHat size={20}/>} label="Cocina" active={activeTab === 'kitchen'} onClick={() => setActiveTab('kitchen')} />
             <SidebarItem icon={<UsersIcon size={20}/>} label="Clientes" active={activeTab === 'customers'} onClick={() => setActiveTab('customers')} />
-            {userRole === 'admin' && (
+            
+            {(userRole === 'admin' || isDemo) && (
               <>
-                <div className="pt-4 pb-2 px-4 text-xs font-semibold text-gray-400 uppercase">Administración</div>
+                <div className="px-4 mt-6 mb-2 flex items-center gap-2">
+                  <div className="h-px flex-1 bg-gray-100"></div>
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Gestión</span>
+                  <div className="h-px flex-1 bg-gray-100"></div>
+                </div>
                 <SidebarItem icon={<CalendarClock size={20}/>} label="Reservas" active={activeTab === 'reservations'} onClick={() => setActiveTab('reservations')} />
                 <SidebarItem icon={<Package size={20}/>} label="Inventario" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
                 <SidebarItem icon={<Percent size={20}/>} label="Promociones" active={activeTab === 'promos'} onClick={() => setActiveTab('promos')} />
                 <SidebarItem icon={<HistoryIcon size={20}/>} label="Historial" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
                 <SidebarItem icon={<UserCog size={20}/>} label="Usuarios" active={activeTab === 'users'} onClick={() => setActiveTab('users')} />
+                <SidebarItem icon={<BarChart3 size={20}/>} label="Reportes" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
               </>
             )}
           </nav>
         </div>
         <div className="p-4 border-t">
-          <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><LogOut size={20} /> Salir</button>
+          <button onClick={handleLogout} className="flex items-center justify-center gap-3 w-full px-4 py-2.5 text-gray-600 bg-white border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-100 rounded-xl transition-all font-medium text-sm shadow-sm">
+            <LogOut size={18} /> Cerrar Sesión
+          </button>
         </div>
       </aside>
 
-      {/* HEADER MÓVIL (Solo Celulares) */}
+      {/* HEADER MÓVIL */}
       <header className="md:hidden fixed top-0 w-full bg-white z-20 border-b flex justify-between items-center p-4 safe-area-top shadow-sm h-16">
         <div className="flex items-center gap-2">
-          <span className="text-2xl">🍕</span>
-          <h1 className="font-bold text-orange-600">PizzaFlow</h1>
+           <div className="bg-orange-100 p-1.5 rounded-full"><PizzaIcon className="w-5 h-5 text-orange-600" /></div>
+          <h1 className="font-bold text-gray-800">PizzaFlow</h1>
         </div>
         <div className="flex gap-3">
             {activeTab === 'pos' && (
@@ -241,22 +484,28 @@ function App() {
         </div>
       </header>
       
-      {/* MENÚ HAMBURGUESA MÓVIL (Overlay) */}
+      {/* MENÚ MÓVIL */}
       {showMobileMenu && (
         <div className="fixed inset-0 bg-black/50 z-50 md:hidden backdrop-blur-sm" onClick={() => setShowMobileMenu(false)}>
-          <div className="bg-white w-64 h-full p-4 flex flex-col shadow-2xl animate-in slide-in-from-left" onClick={e => e.stopPropagation()}>
-             <div className="flex justify-between items-center mb-6 border-b pb-4">
-               <span className="font-bold text-lg text-gray-700">Menú</span>
-               <button onClick={() => setShowMobileMenu(false)}><X/></button>
+          <div className="bg-white w-72 h-full p-4 flex flex-col shadow-2xl animate-in slide-in-from-left" onClick={e => e.stopPropagation()}>
+             <div className={`flex items-center gap-3 p-4 mb-4 rounded-xl ${isDemo ? 'bg-orange-50 border border-orange-100' : 'bg-gray-50'}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${isDemo ? 'bg-orange-500' : 'bg-gray-700'}`}>
+                    {session?.user?.email?.substring(0,2).toUpperCase()}
+                </div>
+                <div className="overflow-hidden">
+                    <p className={`text-xs font-bold uppercase ${isDemo ? 'text-orange-600' : 'text-gray-500'}`}>{isDemo ? 'Modo Demo' : 'Usuario'}</p>
+                    <p className="text-sm font-medium truncate w-32">{session?.user?.email}</p>
+                </div>
              </div>
-             <nav className="space-y-2 flex-1 overflow-y-auto">
-                {/* Reutilizamos los items, al hacer click cierran el menú */}
-                <SidebarItem icon={<ShoppingCart size={20}/>} label="Punto de Venta" active={activeTab === 'pos'} onClick={() => { setActiveTab('pos'); setShowMobileMenu(false); }} />
+
+             <nav className="space-y-1 flex-1 overflow-y-auto">
+                <SidebarItem icon={<LayoutDashboard size={20}/>} label="Panel Principal" active={activeTab === 'pos'} onClick={() => { setActiveTab('pos'); setShowMobileMenu(false); }} />
                 <SidebarItem icon={<ChefHat size={20}/>} label="Cocina" active={activeTab === 'kitchen'} onClick={() => { setActiveTab('kitchen'); setShowMobileMenu(false); }} />
                 <SidebarItem icon={<UsersIcon size={20}/>} label="Clientes" active={activeTab === 'customers'} onClick={() => { setActiveTab('customers'); setShowMobileMenu(false); }} />
-                {userRole === 'admin' && (
+                
+                {(userRole === 'admin' || isDemo) && (
                    <>
-                     <div className="pt-2 pb-1 text-xs font-bold text-gray-400 uppercase">Admin</div>
+                     <div className="pt-4 pb-2 px-2 text-xs font-bold text-gray-400 uppercase">Administración</div>
                      <SidebarItem icon={<CalendarClock size={20}/>} label="Reservas" active={activeTab === 'reservations'} onClick={() => { setActiveTab('reservations'); setShowMobileMenu(false); }} />
                      <SidebarItem icon={<Package size={20}/>} label="Inventario" active={activeTab === 'inventory'} onClick={() => { setActiveTab('inventory'); setShowMobileMenu(false); }} />
                      <SidebarItem icon={<HistoryIcon size={20}/>} label="Historial" active={activeTab === 'history'} onClick={() => { setActiveTab('history'); setShowMobileMenu(false); }} />
@@ -264,7 +513,7 @@ function App() {
                    </>
                 )}
              </nav>
-             <button onClick={handleLogout} className="mt-4 flex items-center gap-2 text-red-500 w-full p-2 hover:bg-red-50 rounded"><LogOut size={20}/> Salir</button>
+             <button onClick={handleLogout} className="mt-4 flex items-center justify-center gap-2 text-red-500 w-full p-3 hover:bg-red-50 rounded-xl border border-red-100 font-medium"><LogOut size={20}/> Salir</button>
           </div>
         </div>
       )}
@@ -273,50 +522,72 @@ function App() {
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-gray-50 relative pt-16 md:pt-0">
         
         {activeTab === 'pos' && (
-          <div className="flex h-full flex-col md:flex-row"> {/* Cambia dirección flex en móvil */}
+          <div className="flex h-full flex-col md:flex-row"> 
             
-            {/* SECCIÓN PRODUCTOS: Visible siempre en desktop, o si mobileView es 'products' */}
+            {/* PRODUCTOS Y PROMOCIONES */}
             <div className={`flex-1 overflow-y-auto p-4 md:p-6 ${mobileView === 'cart' ? 'hidden md:block' : 'block'}`}>
-              <header className="flex gap-2 mb-4 overflow-x-auto pb-2 no-scrollbar"> {/* no-scrollbar es opcional */}
+              <header className="flex gap-2 mb-4 overflow-x-auto pb-2 no-scrollbar"> 
                 {categories.map((cat) => (
-                  <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap flex-shrink-0 ${selectedCategory === cat ? 'bg-orange-500 text-white shadow-md' : 'bg-white border text-gray-600'}`}>{cat}</button>
+                  <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap flex-shrink-0 transition-colors ${selectedCategory === cat ? 'bg-orange-600 text-white shadow-md' : 'bg-white border text-gray-600 hover:bg-gray-50'}`}>{cat}</button>
                 ))}
               </header>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-24 md:pb-0"> {/* Padding bottom extra para el botón flotante móvil */}
-                {filteredProducts.map((product) => (
-                  <div key={product.id} onClick={() => addToCart(product)} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex justify-between items-center md:block md:p-4 hover:shadow-md cursor-pointer active:scale-95 duration-100">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-24 md:pb-0"> 
+                
+                {/* RENDERIZADO DE PRODUCTOS */}
+                {selectedCategory !== 'Promociones' && filteredProducts.map((product) => (
+                  <div key={product.id} onClick={() => addToCart(product)} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex justify-between items-center md:block md:p-4 hover:shadow-md cursor-pointer active:scale-95 duration-100 group">
                     <div className="flex-1">
-                      <h3 className="font-bold text-gray-800 text-sm md:text-lg mb-1">{product.name}</h3>
-                      <span className="text-[10px] md:text-xs bg-gray-100 px-2 py-1 rounded text-gray-500">{product.category}</span>
+                      <h3 className="font-bold text-gray-800 text-sm md:text-lg mb-1 group-hover:text-orange-600 transition-colors">{product.name}</h3>
+                      <span className="text-[10px] md:text-xs bg-gray-50 px-2 py-1 rounded text-gray-500 border border-gray-100">{product.category}</span>
                     </div>
                     <div className="font-bold text-base md:text-xl text-orange-600 md:mt-2 whitespace-nowrap ml-2">$ {product.price.toLocaleString('es-AR')}</div>
                   </div>
                 ))}
+
+                {/* RENDERIZADO DE PROMOCIONES */}
+                {selectedCategory === 'Promociones' && promotions.map((promo) => (
+                  <div key={promo.id} onClick={() => handleAddPromotionToCart(promo)} className="bg-purple-50 rounded-xl shadow-sm border border-purple-100 p-3 flex justify-between items-center md:block md:p-4 hover:shadow-md cursor-pointer active:scale-95 duration-100 group">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-purple-900 text-sm md:text-lg mb-1 flex items-center gap-2">
+                          <Tag size={16}/> {promo.name}
+                      </h3>
+                      <span className="text-[10px] md:text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded border border-purple-300 font-bold">
+                          {promo.discount_percentage}% OFF
+                      </span>
+                    </div>
+                    <div className="font-bold text-xs text-purple-600 md:mt-2 mt-0 ml-2">Click para agregar</div>
+                  </div>
+                ))}
+
+                {selectedCategory === 'Promociones' && promotions.length === 0 && (
+                    <div className="col-span-full py-10 text-center text-gray-400">
+                        No hay promociones activas.
+                    </div>
+                )}
+
               </div>
             </div>
             
-            {/* BOTÓN FLOTANTE "VER CARRITO" (SOLO MÓVIL) */}
-            <div className={`md:hidden fixed bottom-6 left-4 right-4 z-30 transition-transform ${mobileView === 'products' && cart.length > 0 ? 'translate-y-0' : 'translate-y-24'}`}>
+            {/* BOTÓN FLOTANTE MÓVIL */}
+            <div className={`md:hidden fixed bottom-6 left-4 right-4 z-30 transition-transform duration-300 ${mobileView === 'products' && cart.length > 0 ? 'translate-y-0' : 'translate-y-24'}`}>
                 <button 
                     onClick={() => setMobileView('cart')}
-                    className="w-full bg-orange-600 text-white p-4 rounded-xl shadow-xl flex justify-between items-center font-bold text-lg"
+                    className="w-full bg-gray-900 text-white p-4 rounded-xl shadow-xl flex justify-between items-center font-bold text-lg"
                 >
-                    <span className="bg-white/20 px-3 py-1 rounded-lg text-sm">{cart.length} ítems</span>
+                    <span className="bg-orange-500 px-3 py-1 rounded-lg text-sm">{cart.length} ítems</span>
                     <span>Ver Pedido</span>
                     <span>$ {finalTotal.toLocaleString()}</span>
                 </button>
             </div>
 
-            {/* SECCIÓN CARRITO: Visible siempre en desktop, o si mobileView es 'cart' */}
+            {/* CARRITO */}
             <aside className={`w-full md:w-96 bg-white md:border-l border-gray-200 flex flex-col h-full shadow-xl z-10 absolute md:static inset-0 ${mobileView === 'products' ? 'hidden md:flex' : 'flex'}`}>
               
-              {/* Header Carrito Móvil (Botón volver) */}
               <div className="md:hidden p-4 border-b flex items-center gap-3">
                   <button onClick={() => setMobileView('products')} className="p-2 bg-gray-100 rounded-full"><X size={20}/></button>
                   <span className="font-bold text-lg">Tu Pedido</span>
               </div>
 
-              {/* BUSCADOR CLIENTES */}
               <div className="p-4 border-b border-gray-100 bg-gray-50 relative">
                 <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Cliente</label>
                 <div className="flex gap-2">
@@ -338,60 +609,65 @@ function App() {
                       </div>
                     )}
                   </div>
-                  <button onClick={() => setShowQuickCustomer(true)} className="bg-orange-100 p-3 rounded-lg text-orange-600 flex-shrink-0"><UserPlus size={20}/></button>
+                  <button onClick={() => setShowQuickCustomer(true)} className="bg-white border border-gray-300 hover:border-orange-500 hover:text-orange-600 p-3 rounded-lg text-gray-500 flex-shrink-0 transition-colors"><UserPlus size={20}/></button>
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-2 pb-24 md:pb-4">
-                {cart.length === 0 && <div className="text-center text-gray-400 mt-10">Carrito vacío</div>}
+                {cart.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-center">
+                        <ShoppingCart size={40} className="mb-2 opacity-20"/>
+                        <p className="text-sm">Carrito vacío</p>
+                    </div>
+                )}
                 {cart.map((item) => (
-                  <div key={item.cartId} className="flex justify-between items-center bg-white border border-gray-100 p-3 rounded-lg shadow-sm">
-                    <div><p className="font-medium text-sm">{item.name}</p><p className="text-gray-500 text-xs">$ {item.price}</p></div>
-                    <button onClick={() => removeFromCart(item.cartId)} className="text-red-400 hover:text-red-600 p-2"><MinusCircle size={18}/></button>
+                  <div key={item.cartId} className="flex justify-between items-center bg-white border border-gray-100 p-3 rounded-lg shadow-sm group hover:border-orange-200 transition-colors">
+                    <div><p className="font-medium text-sm text-gray-800">{item.name}</p><p className="text-gray-500 text-xs">$ {item.price}</p></div>
+                    <button onClick={() => removeFromCart(item.cartId)} className="text-gray-300 hover:text-red-500 p-2 transition-colors"><MinusCircle size={18}/></button>
                   </div>
                 ))}
-                {appliedDiscounts.length > 0 && <div className="mt-4 pt-4 border-t border-dashed"><p className="text-xs font-bold uppercase text-gray-500">Descuentos</p>{appliedDiscounts.map((d, i) => <div key={i} className="flex justify-between text-green-600 text-sm"><span>{d.name}</span><span>- ${d.amount}</span></div>)}</div>}
+                {appliedDiscounts.length > 0 && <div className="mt-4 pt-4 border-t border-dashed"><p className="text-xs font-bold uppercase text-gray-500 mb-2">Descuentos Aplicados</p>{appliedDiscounts.map((d, i) => <div key={i} className="flex justify-between text-green-600 text-sm bg-green-50 p-2 rounded mb-1"><span>{d.name}</span><span>- ${d.amount}</span></div>)}</div>}
               </div>
               
-              <div className="p-6 bg-gray-50 border-t md:relative fixed bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto z-20 pb-8 md:pb-6 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
+              <div className="p-6 bg-white border-t md:relative fixed bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto z-20 pb-8 md:pb-6 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
                 <div className="flex justify-between mb-4 text-2xl font-bold"><span>Total</span><span className="text-orange-600">$ {finalTotal.toLocaleString('es-AR')}</span></div>
-                <button onClick={handleCheckout} disabled={cart.length === 0} className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-4 rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2">
-                    <Receipt size={20}/> Confirmar Pedido
+                <button onClick={handleCheckout} disabled={cart.length === 0 || isProcessing} className="w-full bg-gray-900 hover:bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+                    {isProcessing ? 'Procesando...' : <><Receipt size={20}/> Confirmar Pedido</>}
                 </button>
               </div>
             </aside>
           </div>
         )}
 
-        {/* COMPONENTES DE OTRAS PESTAÑAS (Adaptados con scroll) */}
-        <div className="flex-1 overflow-auto">
+        {/* CONTENIDORES DE OTRAS SECCIONES */}
+        <div className="flex-1 overflow-auto bg-gray-50">
             {activeTab === 'kitchen' && <Kitchen />}
             {activeTab === 'customers' && <Customers />}
-            {userRole === 'admin' && activeTab === 'reservations' && <Reservations />}
-            {userRole === 'admin' && activeTab === 'inventory' && <Inventory />}
-            {userRole === 'admin' && activeTab === 'promos' && <Promotions />}
-            {userRole === 'admin' && activeTab === 'history' && <History />}
-            {userRole === 'admin' && activeTab === 'users' && <Users />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'reservations' && <Reservations />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'inventory' && <Inventory />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'promos' && <Promotions />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'history' && <History />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'users' && <Users />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'reports' && <div className="p-10 text-center text-gray-500">Reportes en construcción...</div>}
         </div>
 
-        {/* MODAL CREAR CLIENTE RÁPIDO */}
+        {/* MODALES */}
         {showQuickCustomer && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4 animate-in fade-in">
             <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
               <h3 className="text-xl font-bold mb-4">Nuevo Cliente</h3>
-              <input autoFocus className="w-full p-3 border rounded-lg mb-4 text-lg" placeholder="Nombre" value={quickCustomerName} onChange={e => setQuickCustomerName(e.target.value)} />
-              <div className="flex gap-2"><button onClick={() => setShowQuickCustomer(false)} className="flex-1 py-3 text-gray-500">Cancelar</button><button onClick={handleQuickCustomerCreate} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-lg">Guardar</button></div>
+              <input autoFocus className="w-full p-3 border rounded-lg mb-4 text-lg outline-none focus:ring-2 focus:ring-orange-500" placeholder="Nombre completo" value={quickCustomerName} onChange={e => setQuickCustomerName(e.target.value)} />
+              <div className="flex gap-2"><button onClick={() => setShowQuickCustomer(false)} className="flex-1 py-3 text-gray-500 hover:bg-gray-50 rounded-lg">Cancelar</button><button onClick={handleQuickCustomerCreate} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-700">Guardar</button></div>
             </div>
           </div>
         )}
 
-        {/* MODAL CAMBIO CONTRASEÑA */}
         {showPasswordModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4 animate-in fade-in">
             <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
               <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold flex items-center gap-2">🔑 Nueva Clave</h3><button onClick={() => setShowPasswordModal(false)}><X/></button></div>
-              <input type="password" placeholder="Mínimo 6 caracteres" className="w-full p-3 border rounded-lg mb-4" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-              <button onClick={handleChangePassword} className="w-full py-3 bg-orange-600 text-white font-bold rounded-lg">Actualizar</button>
+              <input type="password" placeholder="Mínimo 6 caracteres" className="w-full p-3 border rounded-lg mb-4 outline-none focus:ring-2 focus:ring-orange-500" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              <button onClick={handleChangePassword} className="w-full py-3 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-700">Actualizar</button>
             </div>
           </div>
         )}
@@ -400,12 +676,18 @@ function App() {
   );
 }
 
+// Componentes auxiliares
 function SidebarItem({ icon, label, active, onClick }: any) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all font-medium mb-1 ${active ? 'bg-orange-50 text-orange-600 shadow-sm' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-700'}`}>
-      {icon} <span>{label}</span>
+    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all font-medium text-sm mb-0.5 ${active ? 'bg-orange-50 text-orange-600 ring-1 ring-orange-100 shadow-sm' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}>
+      <span className={active ? 'text-orange-600' : 'text-gray-400'}>{icon}</span>
+      <span>{label}</span>
     </button>
   );
+}
+
+function PizzaIcon({className}: {className?: string}) {
+    return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M15 11h.01"/><path d="M11 15h.01"/><path d="M16.5 4a2.12 2.12 0 0 1 2.12 2.12 2.12 2.12 0 0 1-2.12 2.12 2.12 2.12 0 0 1-2.12-2.12A2.12 2.12 0 0 1 16.5 4z"/><path d="M21 21l-9-9"/><path d="M3 21l9-9"/><path d="M12 2L2 22h20L12 2z"/></svg>
 }
 
 export default App;

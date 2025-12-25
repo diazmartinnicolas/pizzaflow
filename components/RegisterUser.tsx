@@ -36,7 +36,7 @@ export const RegisterUser = ({ onClose }: { onClose: () => void }) => {
       // 3. Guardar los datos extra (Nombre y Rol) en tu tabla 'users'
       // Usamos el cliente 'supabase' normal porque ese tiene permisos de Admin
       const { error: profileError } = await supabase
-        .from('users') // Asegúrate de que tu tabla se llame 'users' o 'profiles'
+        .from('profiles') // Asegúrate de que tu tabla se llame 'users' o 'profiles'
         .insert([
           {
             id: authData.user.id, // Vinculamos con el ID de autenticación
