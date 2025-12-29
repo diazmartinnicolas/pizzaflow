@@ -1,0 +1,3898 @@
+This file is a merged representation of a subset of the codebase, containing files not matching ignore patterns, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of a subset of the repository's contents that is considered the most important context.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching these patterns are excluded: **.lock, **node_modules**, **dist**, **.git**
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+App.tsx
+components/Customers.tsx
+components/DemoSwitcher.tsx
+components/History.tsx
+components/Inventory.tsx
+components/Kitchen.tsx
+components/Login.tsx
+components/POS.tsx
+components/Promotions.tsx
+components/RegisterUser.tsx
+components/Reservations.tsx
+components/Users.tsx
+context/AppContext.tsx
+index.css
+index.html
+index.tsx
+main.js
+manifest.json
+metadata.json
+package.json
+postcss.config.js
+public/_redirects
+README.md
+services/audit.ts
+services/geminiService.ts
+services/supabase.ts
+tailwind.config.js
+tsconfig.json
+types.ts
+vite.config.ts
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="App.tsx">
+import { useEffect, useState } from 'react';
+import { supabase } from './services/supabase'; 
+import { logAction } from './services/audit'; 
+import { Login } from './components/Login';
+import Kitchen from './components/Kitchen';
+import Inventory from './components/Inventory';
+import Customers from './components/Customers';
+import Promotions from './components/Promotions';
+import Users from './components/Users';
+import History from './components/History';
+import Reservations from './components/Reservations';
+
+// Iconos
+import { 
+  ShoppingCart, ChefHat, Users as UsersIcon, Package, Percent, 
+  History as HistoryIcon, UserCog, LogOut, MinusCircle, 
+  UserPlus, Key, X, Search, CalendarClock, Menu, Receipt,
+  LayoutDashboard, Monitor, Crown, BarChart3, Briefcase, Tag
+} from 'lucide-react';
+
+function App() {
+  const [session, setSession] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
+  // Navegación
+  const [activeTab, setActiveTab] = useState('pos');
+  const [selectedCategory, setSelectedCategory] = useState('Todo');
+  
+  // VISTA MÓVIL
+  const [mobileView, setMobileView] = useState('products');
+
+  // DATOS
+  const [products, setProducts] = useState<any[]>([]);
+  const [promotions, setPromotions] = useState<any[]>([]);
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [cart, setCart] = useState<any[]>([]);
+  
+  // ESTADOS VARIOS
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showQuickCustomer, setShowQuickCustomer] = useState(false);
+  const [quickCustomerName, setQuickCustomerName] = useState('');
+  const [clientSearchTerm, setClientSearchTerm] = useState('');
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [showMobileMenu, setShowMobileMenu] = useState(false); 
+
+  // DETECCIÓN DE MODO DEMO
+  const currentUserEmail = session?.user?.email?.toLowerCase().trim() || '';
+  const isDemo = currentUserEmail.includes('demo');
+
+  // AGREGAMOS 'Promociones' AL FILTRO
+  const categories = ['Todo', 'Promociones', 'Pizzas', 'Milanesas', 'Hamburguesas', 'Empanadas', 'Bebidas', 'Postres'];
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session) fetchUserRole(session.user.id, session.user.email);
+      else setLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      
+      if (event === 'SIGNED_IN' && session) {
+          logAction('LOGIN', 'Inicio de sesión exitoso', 'Sistema');
+          fetchUserRole(session.user.id, session.user.email);
+      } else if (!session) {
+          setUserRole(null); 
+          setLoading(false); 
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchUserRole = async (userId: string, email: string | undefined) => {
+    if (email?.toLowerCase().includes('demo')) {
+        setUserRole('admin');
+        setLoading(false);
+        fetchData(); 
+        return;
+    }
+
+    try {
+        const { data, error } = await supabase.from('profiles').select('role').eq('id', userId).single();
+        
+        if (data) {
+            setUserRole(data.role);
+            if (data.role === 'cocina') setActiveTab('kitchen');
+        } else {
+            setUserRole('cashier'); 
+        }
+    } catch (error) {
+        console.warn("Error rol:", error);
+        setUserRole('cashier');
+    }
+    fetchData(); 
+    setLoading(false);
+  };
+
+  const fetchData = async () => {
+    try {
+        const { data: prodData } = await supabase.from('products').select('*'); 
+        if (prodData) setProducts(prodData);
+
+        const { data: promoData } = await supabase.from('promotions').select('*');
+        if (promoData) setPromotions(promoData);
+
+        const { data: clientData } = await supabase.from('clients').select('*').order('name');
+        
+        let demoIds: string[] = [];
+        try {
+            const { data: profiles } = await supabase.from('profiles').select('id, email');
+            if (profiles) {
+                demoIds = profiles
+                    .filter((p: any) => p.email?.toLowerCase().includes('demo'))
+                    .map((p: any) => p.id);
+            }
+        } catch (e) { 
+            console.warn("No se pudo filtrar demos"); 
+        }
+
+        if (clientData) {
+             const myId = session?.user?.id;
+             let cleanList = clientData;
+
+             if (currentUserEmail.includes('demo')) {
+                cleanList = clientData.filter((c: any) => c.user_id === myId);
+             } else if (demoIds.length > 0) {
+                cleanList = clientData.filter((c: any) => !demoIds.includes(c.user_id));
+             }
+             setCustomers(cleanList);
+        }
+    } catch (error) {
+        console.error("Error fetchData:", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logAction('LOGOUT', 'Usuario cerró sesión', 'Sistema');
+    await supabase.auth.signOut();
+    window.location.reload(); 
+  };
+
+  const handleChangePassword = async () => {
+    if (newPassword.length < 6) return alert("Mínimo 6 caracteres.");
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) alert("Error: " + error.message);
+    else { 
+        await logAction('CAMBIO_CLAVE', 'Usuario actualizó su contraseña', 'Sistema');
+        alert("¡Contraseña actualizada!"); 
+        setShowPasswordModal(false); 
+        setNewPassword(''); 
+    }
+  };
+
+  const addToCart = (product: any) => {
+    setCart(currentCart => [...currentCart, { ...product, cartId: Date.now() + Math.random() }]);
+    if (navigator.vibrate) navigator.vibrate(50);
+  };
+
+  // --- NUEVA FUNCIÓN: AGREGAR PROMOCIÓN AL CARRITO ---
+  const handleAddPromotionToCart = (promo: any) => {
+      // 1. Buscar el producto principal
+      const product1 = products.find(p => p.id === promo.product_1_id);
+      if (product1) {
+          addToCart(product1);
+      }
+
+      // 2. Buscar el producto secundario (si existe) o agregar otro del primero (si es 2x1 del mismo)
+      if (promo.product_2_id) {
+          const product2 = products.find(p => p.id === promo.product_2_id);
+          if (product2) {
+              // Pequeño timeout para que tengan IDs de carrito distintos
+              setTimeout(() => addToCart(product2), 50); 
+          }
+      } else {
+          // Si no tiene producto 2, asumimos que es una oferta sobre el producto 1
+          // PERO la lógica actual de promos en 'calculateTotals' suele requerir 2 items para combos.
+          // Si tu lógica de "20% descuento unitario" requiere solo 1 item, esto está bien.
+          // Si es un "2x1" del mismo producto, agregamos otro igual.
+          if (promo.name.toLowerCase().includes('2x1')) {
+               setTimeout(() => addToCart(product1), 50);
+          }
+      }
+  };
+  
+  const removeFromCart = (cartId: number) => setCart(cart.filter(item => item.cartId !== cartId));
+
+  const calculateTotals = () => {
+    let tempCart = [...cart];
+    let appliedDiscounts: any[] = [];
+    let subtotal = cart.reduce((sum, item) => sum + item.price, 0);
+
+    promotions.forEach(promo => {
+      while (true) {
+        const index1 = tempCart.findIndex(item => item.id === promo.product_1_id);
+        const index2 = promo.product_2_id ? tempCart.findIndex((item, idx) => item.id === promo.product_2_id && idx !== index1) : -1;
+        
+        if (promo.product_2_id) {
+          if (index1 !== -1 && index2 !== -1) {
+            const amount = (tempCart[index1].price + tempCart[index2].price) * (promo.discount_percentage / 100);
+            appliedDiscounts.push({ name: promo.name, amount });
+            const ids = [tempCart[index1].cartId, tempCart[index2].cartId];
+            tempCart = tempCart.filter(item => !ids.includes(item.cartId));
+          } else break;
+        } else {
+          // Lógica para promos de un solo producto (ej: 20% off en una pizza)
+          if (index1 !== -1) {
+            appliedDiscounts.push({ name: promo.name, amount: tempCart[index1].price * (promo.discount_percentage / 100) });
+            const idToRemove = tempCart[index1].cartId;
+            tempCart = tempCart.filter(item => item.cartId !== idToRemove);
+          } else break;
+        }
+      }
+    });
+    const totalDiscount = appliedDiscounts.reduce((sum, d) => sum + d.amount, 0);
+    return { subtotal, totalDiscount, finalTotal: subtotal - totalDiscount, appliedDiscounts };
+  };
+
+  const { finalTotal, appliedDiscounts } = calculateTotals();
+
+  // --- FUNCIÓN CHECKOUT ---
+  const handleCheckout = async () => {
+    if (cart.length === 0) return;
+    if (!selectedCustomerId) return alert("Selecciona un cliente.");
+    
+    setIsProcessing(true);
+
+    // === DEMO ===
+    if (isDemo) {
+        setTimeout(() => {
+            const fakeTicket = Math.floor(Math.random() * 1000) + 1000;
+            const fakeOrder = {
+                id: `demo-${Date.now()}`,
+                ticket_number: fakeTicket,
+                created_at: new Date().toISOString(),
+                client: { name: clientSearchTerm || 'Cliente Demo' },
+                status: 'pendiente',
+                total: finalTotal,
+                order_items: cart.map(item => ({
+                    product: { name: item.name },
+                    quantity: 1 
+                }))
+            };
+
+            const currentDemoOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]');
+            const newDemoOrders = [fakeOrder, ...currentDemoOrders];
+            localStorage.setItem('demo_orders', JSON.stringify(newDemoOrders));
+            window.dispatchEvent(new Event('storage'));
+
+            alert(`¡Ticket #${fakeTicket} SIMULADO y enviado a Cocina!\n(Guardado en memoria local)`);
+            logAction('VENTA', `(Simulada) Ticket #${fakeTicket} - $${finalTotal}`, 'Caja');
+
+            setCart([]);
+            setSelectedCustomerId('');
+            setClientSearchTerm('');
+            setMobileView('products');
+            setIsProcessing(false);
+        }, 800);
+        return; 
+    }
+
+    // === ADMIN ===
+    if (!session || !session.user || !session.user.id) {
+        alert("Error crítico: No se detectó la sesión del usuario.");
+        setIsProcessing(false);
+        return;
+    }
+
+    try {
+      const { data: orderData, error: orderError } = await supabase
+        .from('orders')
+        .insert([{ 
+            client_id: selectedCustomerId, 
+            total: finalTotal, 
+            status: 'pendiente', 
+            payment_type: 'efectivo', 
+            user_id: session.user.id 
+        }])
+        .select()
+        .single();
+
+      if (orderError) throw orderError;
+
+      const itemCounts: any = {};
+      cart.forEach(item => { itemCounts[item.id] = (itemCounts[item.id] || 0) + 1; });
+      
+      const orderItems = Object.keys(itemCounts).map(productId => {
+        const product = products.find(p => p.id === productId);
+        return { 
+            order_id: orderData.id, 
+            product_id: productId, 
+            quantity: itemCounts[productId], 
+            price_at_moment: product.price 
+        };
+      });
+      
+      const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
+      if (itemsError) throw itemsError;
+      
+      await logAction('VENTA', `Ticket #${orderData.ticket_number} - $${finalTotal}`, 'Caja');
+
+      alert(`¡Ticket #${orderData.ticket_number || 'OK'} enviado!`);
+      setCart([]);
+      setSelectedCustomerId('');
+      setClientSearchTerm('');
+      setMobileView('products');
+
+    } catch (error: any) { 
+        console.error("Error al confirmar:", error);
+        alert("Error: " + error.message); 
+    } 
+    finally { 
+        setIsProcessing(false); 
+    }
+  };
+
+  const handleQuickCustomerCreate = async () => {
+    if(!quickCustomerName) return;
+    
+    if (isDemo) {
+        const fakeClient = {
+            id: `temp-${Date.now()}`,
+            name: quickCustomerName,
+            user_id: session?.user?.id,
+            created_at: new Date().toISOString()
+        };
+        
+        setCustomers([fakeClient, ...customers]); 
+        setSelectedCustomerId(fakeClient.id);
+        setClientSearchTerm(fakeClient.name); 
+        setShowQuickCustomer(false);
+        setQuickCustomerName('');
+        logAction('CREAR_CLIENTE', `(Simulado) ${quickCustomerName}`, 'Clientes');
+        alert("Cliente Rápido creado en MEMORIA (Modo Demo)");
+        return;
+    }
+
+    if (!session || !session.user) return alert("Error de sesión.");
+
+    try {
+        const { data, error } = await supabase.from('clients')
+            .insert([{ 
+                name: quickCustomerName,
+                user_id: session.user.id 
+            }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        await logAction('CREAR_CLIENTE', `Rápido: ${data.name}`, 'Clientes');
+
+        setCustomers([data, ...customers]); 
+        setSelectedCustomerId(data.id);
+        setClientSearchTerm(data.name); 
+        setShowQuickCustomer(false);
+        setQuickCustomerName('');
+        
+    } catch (error: any) {
+        console.error("Error creando cliente:", error);
+        alert("No se pudo crear el cliente: " + error.message);
+    }
+  };
+
+  const getRoleLabel = () => {
+    if (isDemo) return 'Usuario Demo';
+    if (userRole === 'admin') return 'Administrador';
+    if (userRole === 'cashier' || userRole === 'cajero') return 'Cajero';
+    if (userRole === 'cocina') return 'Cocina';
+    return 'Usuario';
+  };
+
+  const filteredProducts = selectedCategory === 'Todo' ? products : products.filter(p => p.category === selectedCategory);
+  const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()));
+
+  if (loading) return <div className="h-dvh flex items-center justify-center text-orange-600 font-bold animate-pulse">Cargando PizzaFlow...</div>;
+  if (!session) return <Login />;
+
+  if (userRole === 'cocina') {
+    return (
+      <div className="h-dvh flex flex-col bg-gray-900">
+        <div className="bg-gray-800 text-white p-4 flex justify-between items-center safe-area-top">
+          <h1 className="font-bold text-xl flex items-center gap-2">👨‍🍳 Cocina</h1>
+          <button onClick={handleLogout} className="text-red-300"><LogOut size={20}/></button>
+        </div>
+        <div className="flex-1 overflow-hidden"><Kitchen /></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-dvh bg-gray-50 font-sans text-gray-800 overflow-hidden">
+      
+      {/* SIDEBAR DESKTOP */}
+      <aside className="w-64 bg-white border-r border-gray-200 flex-col justify-between hidden md:flex z-50">
+        <div>
+          <div className="p-5 pb-2">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="bg-orange-100 p-2 rounded-full">
+                <PizzaIcon className="w-6 h-6 text-orange-600" />
+              </div>
+              <h1 className="text-xl font-bold text-gray-800 tracking-tight">PizzaFlow</h1>
+            </div>
+
+            <div className={`flex items-center justify-between px-3 py-3 rounded-xl border mb-2 shadow-sm transition-all ${
+              isDemo 
+                ? 'bg-gradient-to-r from-orange-50 to-orange-100 border-orange-200' 
+                : 'bg-white border-gray-200'
+            }`}>
+              <div className="flex flex-col">
+                <span className={`text-[10px] font-extrabold tracking-wider uppercase mb-0.5 ${
+                  isDemo ? 'text-orange-600' : 'text-gray-400'
+                }`}>
+                  {isDemo ? 'MODO VISITA' : 'TU ROL'}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {isDemo ? <Monitor className="w-3.5 h-3.5 text-orange-700" /> : 
+                   userRole === 'admin' ? <Crown className="w-3.5 h-3.5 text-yellow-500" /> :
+                   <Briefcase className="w-3.5 h-3.5 text-blue-500" />}
+                  
+                  <span className={`text-sm font-bold ${
+                    isDemo ? 'text-orange-800' : 'text-gray-800'
+                  }`}>
+                    {getRoleLabel()}
+                  </span>
+                </div>
+              </div>
+
+              {!isDemo && (
+                <button onClick={() => setShowPasswordModal(true)} className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-gray-50 rounded-lg transition-colors">
+                  <Key className="w-4 h-4" /> 
+                </button>
+              )}
+            </div>
+          </div>
+          
+          <nav className="px-3 space-y-1">
+            <SidebarItem icon={<ShoppingCart size={20}/>} label="Punto de Venta" active={activeTab === 'pos'} onClick={() => setActiveTab('pos')} />
+            <SidebarItem icon={<ChefHat size={20}/>} label="Cocina" active={activeTab === 'kitchen'} onClick={() => setActiveTab('kitchen')} />
+            <SidebarItem icon={<UsersIcon size={20}/>} label="Clientes" active={activeTab === 'customers'} onClick={() => setActiveTab('customers')} />
+            
+            {(userRole === 'admin' || isDemo) && (
+              <>
+                <div className="px-4 mt-6 mb-2 flex items-center gap-2">
+                  <div className="h-px flex-1 bg-gray-100"></div>
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Gestión</span>
+                  <div className="h-px flex-1 bg-gray-100"></div>
+                </div>
+                <SidebarItem icon={<CalendarClock size={20}/>} label="Reservas" active={activeTab === 'reservations'} onClick={() => setActiveTab('reservations')} />
+                <SidebarItem icon={<Package size={20}/>} label="Inventario" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
+                <SidebarItem icon={<Percent size={20}/>} label="Promociones" active={activeTab === 'promos'} onClick={() => setActiveTab('promos')} />
+                <SidebarItem icon={<HistoryIcon size={20}/>} label="Historial" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
+                <SidebarItem icon={<UserCog size={20}/>} label="Usuarios" active={activeTab === 'users'} onClick={() => setActiveTab('users')} />
+                <SidebarItem icon={<BarChart3 size={20}/>} label="Reportes" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
+              </>
+            )}
+          </nav>
+        </div>
+        <div className="p-4 border-t">
+          <button onClick={handleLogout} className="flex items-center justify-center gap-3 w-full px-4 py-2.5 text-gray-600 bg-white border border-gray-200 hover:bg-red-50 hover:text-red-600 hover:border-red-100 rounded-xl transition-all font-medium text-sm shadow-sm">
+            <LogOut size={18} /> Cerrar Sesión
+          </button>
+        </div>
+      </aside>
+
+      {/* HEADER MÓVIL */}
+      <header className="md:hidden fixed top-0 w-full bg-white z-20 border-b flex justify-between items-center p-4 safe-area-top shadow-sm h-16">
+        <div className="flex items-center gap-2">
+           <div className="bg-orange-100 p-1.5 rounded-full"><PizzaIcon className="w-5 h-5 text-orange-600" /></div>
+          <h1 className="font-bold text-gray-800">PizzaFlow</h1>
+        </div>
+        <div className="flex gap-3">
+            {activeTab === 'pos' && (
+                <div className="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                    <ShoppingCart size={14}/> {cart.length}
+                </div>
+            )}
+            <button onClick={() => setShowMobileMenu(!showMobileMenu)} className="text-gray-600"><Menu/></button>
+        </div>
+      </header>
+      
+      {/* MENÚ MÓVIL */}
+      {showMobileMenu && (
+        <div className="fixed inset-0 bg-black/50 z-50 md:hidden backdrop-blur-sm" onClick={() => setShowMobileMenu(false)}>
+          <div className="bg-white w-72 h-full p-4 flex flex-col shadow-2xl animate-in slide-in-from-left" onClick={e => e.stopPropagation()}>
+             <div className={`flex items-center gap-3 p-4 mb-4 rounded-xl ${isDemo ? 'bg-orange-50 border border-orange-100' : 'bg-gray-50'}`}>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${isDemo ? 'bg-orange-500' : 'bg-gray-700'}`}>
+                    {session?.user?.email?.substring(0,2).toUpperCase()}
+                </div>
+                <div className="overflow-hidden">
+                    <p className={`text-xs font-bold uppercase ${isDemo ? 'text-orange-600' : 'text-gray-500'}`}>{isDemo ? 'Modo Demo' : 'Usuario'}</p>
+                    <p className="text-sm font-medium truncate w-32">{session?.user?.email}</p>
+                </div>
+             </div>
+
+             <nav className="space-y-1 flex-1 overflow-y-auto">
+                <SidebarItem icon={<LayoutDashboard size={20}/>} label="Panel Principal" active={activeTab === 'pos'} onClick={() => { setActiveTab('pos'); setShowMobileMenu(false); }} />
+                <SidebarItem icon={<ChefHat size={20}/>} label="Cocina" active={activeTab === 'kitchen'} onClick={() => { setActiveTab('kitchen'); setShowMobileMenu(false); }} />
+                <SidebarItem icon={<UsersIcon size={20}/>} label="Clientes" active={activeTab === 'customers'} onClick={() => { setActiveTab('customers'); setShowMobileMenu(false); }} />
+                
+                {(userRole === 'admin' || isDemo) && (
+                   <>
+                     <div className="pt-4 pb-2 px-2 text-xs font-bold text-gray-400 uppercase">Administración</div>
+                     <SidebarItem icon={<CalendarClock size={20}/>} label="Reservas" active={activeTab === 'reservations'} onClick={() => { setActiveTab('reservations'); setShowMobileMenu(false); }} />
+                     <SidebarItem icon={<Package size={20}/>} label="Inventario" active={activeTab === 'inventory'} onClick={() => { setActiveTab('inventory'); setShowMobileMenu(false); }} />
+                     <SidebarItem icon={<HistoryIcon size={20}/>} label="Historial" active={activeTab === 'history'} onClick={() => { setActiveTab('history'); setShowMobileMenu(false); }} />
+                     <SidebarItem icon={<UserCog size={20}/>} label="Usuarios" active={activeTab === 'users'} onClick={() => { setActiveTab('users'); setShowMobileMenu(false); }} />
+                   </>
+                )}
+             </nav>
+             <button onClick={handleLogout} className="mt-4 flex items-center justify-center gap-2 text-red-500 w-full p-3 hover:bg-red-50 rounded-xl border border-red-100 font-medium"><LogOut size={20}/> Salir</button>
+          </div>
+        </div>
+      )}
+
+      {/* CONTENIDO PRINCIPAL */}
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-gray-50 relative pt-16 md:pt-0">
+        
+        {activeTab === 'pos' && (
+          <div className="flex h-full flex-col md:flex-row"> 
+            
+            {/* PRODUCTOS Y PROMOCIONES */}
+            <div className={`flex-1 overflow-y-auto p-4 md:p-6 ${mobileView === 'cart' ? 'hidden md:block' : 'block'}`}>
+              <header className="flex gap-2 mb-4 overflow-x-auto pb-2 no-scrollbar"> 
+                {categories.map((cat) => (
+                  <button key={cat} onClick={() => setSelectedCategory(cat)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap flex-shrink-0 transition-colors ${selectedCategory === cat ? 'bg-orange-600 text-white shadow-md' : 'bg-white border text-gray-600 hover:bg-gray-50'}`}>{cat}</button>
+                ))}
+              </header>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 pb-24 md:pb-0"> 
+                
+                {/* RENDERIZADO DE PRODUCTOS */}
+                {selectedCategory !== 'Promociones' && filteredProducts.map((product) => (
+                  <div key={product.id} onClick={() => addToCart(product)} className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 flex justify-between items-center md:block md:p-4 hover:shadow-md cursor-pointer active:scale-95 duration-100 group">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-gray-800 text-sm md:text-lg mb-1 group-hover:text-orange-600 transition-colors">{product.name}</h3>
+                      <span className="text-[10px] md:text-xs bg-gray-50 px-2 py-1 rounded text-gray-500 border border-gray-100">{product.category}</span>
+                    </div>
+                    <div className="font-bold text-base md:text-xl text-orange-600 md:mt-2 whitespace-nowrap ml-2">$ {product.price.toLocaleString('es-AR')}</div>
+                  </div>
+                ))}
+
+                {/* RENDERIZADO DE PROMOCIONES */}
+                {selectedCategory === 'Promociones' && promotions.map((promo) => (
+                  <div key={promo.id} onClick={() => handleAddPromotionToCart(promo)} className="bg-purple-50 rounded-xl shadow-sm border border-purple-100 p-3 flex justify-between items-center md:block md:p-4 hover:shadow-md cursor-pointer active:scale-95 duration-100 group">
+                    <div className="flex-1">
+                      <h3 className="font-bold text-purple-900 text-sm md:text-lg mb-1 flex items-center gap-2">
+                          <Tag size={16}/> {promo.name}
+                      </h3>
+                      <span className="text-[10px] md:text-xs bg-purple-200 text-purple-800 px-2 py-1 rounded border border-purple-300 font-bold">
+                          {promo.discount_percentage}% OFF
+                      </span>
+                    </div>
+                    <div className="font-bold text-xs text-purple-600 md:mt-2 mt-0 ml-2">Click para agregar</div>
+                  </div>
+                ))}
+
+                {selectedCategory === 'Promociones' && promotions.length === 0 && (
+                    <div className="col-span-full py-10 text-center text-gray-400">
+                        No hay promociones activas.
+                    </div>
+                )}
+
+              </div>
+            </div>
+            
+            {/* BOTÓN FLOTANTE MÓVIL */}
+            <div className={`md:hidden fixed bottom-6 left-4 right-4 z-30 transition-transform duration-300 ${mobileView === 'products' && cart.length > 0 ? 'translate-y-0' : 'translate-y-24'}`}>
+                <button 
+                    onClick={() => setMobileView('cart')}
+                    className="w-full bg-gray-900 text-white p-4 rounded-xl shadow-xl flex justify-between items-center font-bold text-lg"
+                >
+                    <span className="bg-orange-500 px-3 py-1 rounded-lg text-sm">{cart.length} ítems</span>
+                    <span>Ver Pedido</span>
+                    <span>$ {finalTotal.toLocaleString()}</span>
+                </button>
+            </div>
+
+            {/* CARRITO */}
+            <aside className={`w-full md:w-96 bg-white md:border-l border-gray-200 flex flex-col h-full shadow-xl z-10 absolute md:static inset-0 ${mobileView === 'products' ? 'hidden md:flex' : 'flex'}`}>
+              
+              <div className="md:hidden p-4 border-b flex items-center gap-3">
+                  <button onClick={() => setMobileView('products')} className="p-2 bg-gray-100 rounded-full"><X size={20}/></button>
+                  <span className="font-bold text-lg">Tu Pedido</span>
+              </div>
+
+              <div className="p-4 border-b border-gray-100 bg-gray-50 relative">
+                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Cliente</label>
+                <div className="flex gap-2">
+                  <div className="relative w-full">
+                    <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Search size={16} /></div>
+                    <input type="text" placeholder="Buscar..." className="w-full pl-9 p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 bg-white text-sm"
+                      value={clientSearchTerm}
+                      onChange={(e) => { setClientSearchTerm(e.target.value); setShowClientDropdown(true); if(e.target.value === '') setSelectedCustomerId(''); }}
+                      onFocus={() => setShowClientDropdown(true)}
+                    />
+                    {showClientDropdown && filteredCustomers.length > 0 && (
+                      <div className="absolute w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-xl max-h-40 overflow-y-auto z-50">
+                        {filteredCustomers.map(c => (
+                          <div key={c.id} onClick={() => { setSelectedCustomerId(c.id); setClientSearchTerm(c.name); setShowClientDropdown(false); }}
+                            className="p-3 hover:bg-orange-50 cursor-pointer border-b border-gray-50 flex justify-between items-center text-sm">
+                            <span className="font-medium text-gray-800">{c.name}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button onClick={() => setShowQuickCustomer(true)} className="bg-white border border-gray-300 hover:border-orange-500 hover:text-orange-600 p-3 rounded-lg text-gray-500 flex-shrink-0 transition-colors"><UserPlus size={20}/></button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 pb-24 md:pb-4">
+                {cart.length === 0 && (
+                    <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-center">
+                        <ShoppingCart size={40} className="mb-2 opacity-20"/>
+                        <p className="text-sm">Carrito vacío</p>
+                    </div>
+                )}
+                {cart.map((item) => (
+                  <div key={item.cartId} className="flex justify-between items-center bg-white border border-gray-100 p-3 rounded-lg shadow-sm group hover:border-orange-200 transition-colors">
+                    <div><p className="font-medium text-sm text-gray-800">{item.name}</p><p className="text-gray-500 text-xs">$ {item.price}</p></div>
+                    <button onClick={() => removeFromCart(item.cartId)} className="text-gray-300 hover:text-red-500 p-2 transition-colors"><MinusCircle size={18}/></button>
+                  </div>
+                ))}
+                {appliedDiscounts.length > 0 && <div className="mt-4 pt-4 border-t border-dashed"><p className="text-xs font-bold uppercase text-gray-500 mb-2">Descuentos Aplicados</p>{appliedDiscounts.map((d, i) => <div key={i} className="flex justify-between text-green-600 text-sm bg-green-50 p-2 rounded mb-1"><span>{d.name}</span><span>- ${d.amount}</span></div>)}</div>}
+              </div>
+              
+              <div className="p-6 bg-white border-t md:relative fixed bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:right-auto z-20 pb-8 md:pb-6 shadow-[0_-5px_15px_rgba(0,0,0,0.05)]">
+                <div className="flex justify-between mb-4 text-2xl font-bold"><span>Total</span><span className="text-orange-600">$ {finalTotal.toLocaleString('es-AR')}</span></div>
+                <button onClick={handleCheckout} disabled={cart.length === 0 || isProcessing} className="w-full bg-gray-900 hover:bg-orange-600 text-white font-bold py-4 rounded-xl shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-colors">
+                    {isProcessing ? 'Procesando...' : <><Receipt size={20}/> Confirmar Pedido</>}
+                </button>
+              </div>
+            </aside>
+          </div>
+        )}
+
+        {/* CONTENIDORES DE OTRAS SECCIONES */}
+        <div className="flex-1 overflow-auto bg-gray-50">
+            {activeTab === 'kitchen' && <Kitchen />}
+            {activeTab === 'customers' && <Customers />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'reservations' && <Reservations />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'inventory' && <Inventory />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'promos' && <Promotions />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'history' && <History />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'users' && <Users />}
+            {(userRole === 'admin' || isDemo) && activeTab === 'reports' && <div className="p-10 text-center text-gray-500">Reportes en construcción...</div>}
+        </div>
+
+        {/* MODALES */}
+        {showQuickCustomer && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
+              <h3 className="text-xl font-bold mb-4">Nuevo Cliente</h3>
+              <input autoFocus className="w-full p-3 border rounded-lg mb-4 text-lg outline-none focus:ring-2 focus:ring-orange-500" placeholder="Nombre completo" value={quickCustomerName} onChange={e => setQuickCustomerName(e.target.value)} />
+              <div className="flex gap-2"><button onClick={() => setShowQuickCustomer(false)} className="flex-1 py-3 text-gray-500 hover:bg-gray-50 rounded-lg">Cancelar</button><button onClick={handleQuickCustomerCreate} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-700">Guardar</button></div>
+            </div>
+          </div>
+        )}
+
+        {showPasswordModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
+              <div className="flex justify-between items-center mb-4"><h3 className="text-xl font-bold flex items-center gap-2">🔑 Nueva Clave</h3><button onClick={() => setShowPasswordModal(false)}><X/></button></div>
+              <input type="password" placeholder="Mínimo 6 caracteres" className="w-full p-3 border rounded-lg mb-4 outline-none focus:ring-2 focus:ring-orange-500" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+              <button onClick={handleChangePassword} className="w-full py-3 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-700">Actualizar</button>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+// Componentes auxiliares
+function SidebarItem({ icon, label, active, onClick }: any) {
+  return (
+    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all font-medium text-sm mb-0.5 ${active ? 'bg-orange-50 text-orange-600 ring-1 ring-orange-100 shadow-sm' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}>
+      <span className={active ? 'text-orange-600' : 'text-gray-400'}>{icon}</span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function PizzaIcon({className}: {className?: string}) {
+    return <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M15 11h.01"/><path d="M11 15h.01"/><path d="M16.5 4a2.12 2.12 0 0 1 2.12 2.12 2.12 2.12 0 0 1-2.12 2.12 2.12 2.12 0 0 1-2.12-2.12A2.12 2.12 0 0 1 16.5 4z"/><path d="M21 21l-9-9"/><path d="M3 21l9-9"/><path d="M12 2L2 22h20L12 2z"/></svg>
+}
+
+export default App;
+</file>
+
+<file path="components/Customers.tsx">
+import { useEffect, useState } from 'react';
+import { supabase } from '../services/supabase';
+import { logAction } from '../services/audit'; // <--- IMPORTAMOS LOGGER
+import { Search, UserPlus, Phone, MapPin, Save, Edit, Trash, X, AlertTriangle } from 'lucide-react';
+
+export default function Clients() {
+  const [clients, setClients] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Estado para saber quién soy
+  const [currentUserEmail, setCurrentUserEmail] = useState('');
+  
+  // Estado del formulario
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ name: '', phone: '', address: '' });
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user?.email) setCurrentUserEmail(user.email);
+    });
+
+    fetchClients();
+  }, []);
+
+  const fetchClients = async () => {
+    const { data } = await supabase.from('clients').select('*').order('created_at', { ascending: false });
+    if (data) setClients(data);
+  };
+
+  const handleSave = async () => {
+    if (!formData.name) return alert("El nombre es obligatorio");
+
+    // === MODO SIMULACIÓN (DEMO) ===
+    if (currentUserEmail.includes('demo')) {
+        const fakeId = editingId || `temp-${Date.now()}`;
+        const fakeClient = {
+            id: fakeId,
+            name: formData.name,
+            phone: formData.phone,
+            address: formData.address,
+            created_at: new Date().toISOString()
+        };
+
+        if (editingId) {
+            setClients(clients.map(c => c.id === editingId ? { ...c, ...fakeClient } : c));
+            // LOG DEMO
+            logAction('EDITAR_CLIENTE', `(Simulado) Editado: ${formData.name}`, 'Clientes');
+        } else {
+            setClients([fakeClient, ...clients]);
+            // LOG DEMO
+            logAction('CREAR_CLIENTE', `(Simulado) Nuevo: ${formData.name}`, 'Clientes');
+        }
+        
+        resetForm();
+        alert("✅ Cliente guardado en MEMORIA (Modo Demo).\nNo se guardó en la base de datos real.");
+        return; 
+    }
+
+    // === MODO REAL (ADMIN) ===
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return alert("Error de sesión");
+
+    let error;
+
+    if (editingId) {
+      const { error: updateError } = await supabase
+        .from('clients')
+        .update({ name: formData.name, phone: formData.phone, address: formData.address })
+        .eq('id', editingId);
+      error = updateError;
+      
+      if(!error) await logAction('EDITAR_CLIENTE', `Editado: ${formData.name}`, 'Clientes');
+
+    } else {
+      const { error: insertError } = await supabase
+        .from('clients')
+        .insert([{ 
+            name: formData.name, 
+            phone: formData.phone, 
+            address: formData.address,
+            user_id: user.id 
+        }]);
+      error = insertError;
+
+      if(!error) await logAction('CREAR_CLIENTE', `Nuevo: ${formData.name}`, 'Clientes');
+    }
+
+    if (!error) {
+      resetForm();
+      fetchClients();
+    } else {
+      alert("Error al guardar: " + error.message);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`¿Borrar a ${name}?`)) return;
+
+    // === MODO SIMULACIÓN ===
+    if (currentUserEmail.includes('demo')) {
+        setClients(clients.filter(c => c.id !== id));
+        logAction('ELIMINAR_CLIENTE', `(Simulado) Borrado: ${name}`, 'Clientes');
+        alert("🗑️ Cliente borrado de MEMORIA (Modo Demo).");
+        return;
+    }
+    
+    // === MODO REAL ===
+    const { error } = await supabase.from('clients').delete().eq('id', id);
+    if (error) {
+      alert("No se pudo borrar: " + error.message);
+    } else {
+      await logAction('ELIMINAR_CLIENTE', `Borrado: ${name}`, 'Clientes');
+      fetchClients();
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({ name: '', phone: '', address: '' });
+    setEditingId(null);
+    setIsFormOpen(false);
+  };
+
+  const handleEdit = (client: any) => {
+    setFormData({ name: client.name, phone: client.phone || '', address: client.address || '' });
+    setEditingId(client.id);
+    setIsFormOpen(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const filteredClients = clients.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    (c.phone && c.phone.includes(searchTerm))
+  );
+
+  const isDemo = currentUserEmail.includes('demo');
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800">👥 Base de Clientes</h2>
+        <button 
+          onClick={() => { resetForm(); setIsFormOpen(!isFormOpen); }} 
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors shadow-sm"
+        >
+          {isFormOpen ? <X size={20} /> : <UserPlus size={20} />} 
+          {isFormOpen ? 'Cancelar' : 'Nuevo Cliente'}
+        </button>
+      </div>
+
+      {isDemo && (
+          <div className="mb-6 bg-orange-50 border border-orange-200 p-3 rounded-lg flex items-center gap-3 text-orange-800 text-sm">
+              <AlertTriangle size={20} className="text-orange-500"/>
+              <p><strong>Modo Demo Activo:</strong> Los clientes que crees aquí no se guardarán en la base de datos real.</p>
+          </div>
+      )}
+
+      {/* Formulario */}
+      {isFormOpen && (
+        <div className={`bg-white p-6 rounded-xl mb-8 shadow-md border-l-4 animate-in fade-in slide-in-from-top-4 ${isDemo ? 'border-orange-500' : 'border-blue-500'}`}>
+          <h3 className="font-bold mb-4 text-gray-700 flex items-center gap-2">
+            {editingId ? <Edit size={18} className={isDemo ? 'text-orange-500' : 'text-blue-500'}/> : <UserPlus size={18} className={isDemo ? 'text-orange-500' : 'text-blue-500'}/>}
+            {editingId ? 'Editar Cliente' : 'Registrar Nuevo Cliente'}
+            {isDemo && <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded ml-2">SIMULACIÓN</span>}
+          </h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Nombre Completo</label>
+              <input 
+                placeholder="Ej: Lionel Messi" 
+                className={`w-full p-3 rounded-lg border focus:ring-2 outline-none ${isDemo ? 'border-orange-200 focus:ring-orange-500' : 'border-gray-300 focus:ring-blue-500'}`}
+                value={formData.name} 
+                onChange={e => setFormData({...formData, name: e.target.value})} 
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Teléfono</label>
+              <input 
+                placeholder="Ej: 11 1234 5678" 
+                className={`w-full p-3 rounded-lg border focus:ring-2 outline-none ${isDemo ? 'border-orange-200 focus:ring-orange-500' : 'border-gray-300 focus:ring-blue-500'}`}
+                value={formData.phone} 
+                onChange={e => setFormData({...formData, phone: e.target.value})} 
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Dirección</label>
+              <input 
+                placeholder="Ej: Calle Falsa 123" 
+                className={`w-full p-3 rounded-lg border focus:ring-2 outline-none ${isDemo ? 'border-orange-200 focus:ring-orange-500' : 'border-gray-300 focus:ring-blue-500'}`}
+                value={formData.address} 
+                onChange={e => setFormData({...formData, address: e.target.value})} 
+              />
+            </div>
+          </div>
+
+          <div className="mt-4 flex gap-2">
+            <button 
+              onClick={handleSave} 
+              className={`flex-1 text-white py-2 rounded-lg font-bold flex justify-center items-center gap-2 transition-colors ${isDemo ? 'bg-orange-500 hover:bg-orange-600' : 'bg-blue-600 hover:bg-blue-700'}`}
+            >
+              <Save size={18} /> {editingId ? 'Guardar Cambios' : 'Registrar Cliente'}
+            </button>
+            {editingId && (
+              <button onClick={resetForm} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-medium">
+                Cancelar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Buscador y Lista */}
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+        <input 
+          type="text" 
+          placeholder="Buscar..." 
+          className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filteredClients.map(client => (
+          <div key={client.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow group relative">
+            <div className="absolute top-4 right-4 flex gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+              <button onClick={() => handleEdit(client)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit size={16} /></button>
+              <button onClick={() => handleDelete(client.id, client.name)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash size={16} /></button>
+            </div>
+
+            <div className="flex items-center gap-3 mb-3">
+              <div className="bg-blue-100 text-blue-600 font-bold w-10 h-10 rounded-full flex items-center justify-center">
+                {client.name.charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-800 text-lg leading-tight">{client.name}</h3>
+                <span className="text-xs text-gray-400">Desde {client.created_at ? new Date(client.created_at).toLocaleDateString() : 'Hoy'}</span>
+              </div>
+            </div>
+            
+            <div className="space-y-2 mt-4 pt-4 border-t border-gray-50">
+              <p className={`flex items-center gap-2 text-sm ${client.phone ? 'text-gray-600' : 'text-gray-300 italic'}`}><Phone size={16} className="text-gray-400"/> {client.phone || 'Sin teléfono'}</p>
+              <p className={`flex items-center gap-2 text-sm ${client.address ? 'text-gray-600' : 'text-gray-300 italic'}`}><MapPin size={16} className="text-gray-400"/> {client.address || 'Sin dirección'}</p>
+            </div>
+          </div>
+        ))}
+        {filteredClients.length === 0 && (
+          <div className="col-span-full py-12 text-center text-gray-400 bg-white rounded-xl border border-dashed border-gray-200">
+            <p className="font-medium">No se encontraron clientes.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="components/DemoSwitcher.tsx">
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Monitor, ChefHat, LayoutDashboard, ShieldCheck } from 'lucide-react';
+
+interface DemoSwitcherProps {
+  currentUserEmail: string | undefined;
+  currentRole: string | undefined; // Si usas roles en tu app
+}
+
+export const DemoSwitcher = ({ currentUserEmail }: DemoSwitcherProps) => {
+  const navigate = useNavigate();
+
+  // SI NO ES EL USUARIO DEMO, NO MOSTRAMOS NADA (Invisible)
+  if (currentUserEmail !== 'demo@pizzaflow.com') return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      <div className="bg-white/90 backdrop-blur border border-orange-200 shadow-2xl p-3 rounded-xl">
+        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
+            <ShieldCheck className="w-4 h-4 text-green-600" />
+            <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">Modo Reclutador</span>
+        </div>
+        
+        <div className="flex flex-col gap-2">
+            <button 
+                onClick={() => navigate('/cashier')} // Ajusta a tu ruta de caja
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-orange-50 hover:text-orange-600 rounded-lg transition-colors"
+            >
+                <Monitor className="w-4 h-4" /> Vista Cajero
+            </button>
+
+            <button 
+                onClick={() => navigate('/kitchen')} // Ajusta a tu ruta de cocina
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-orange-50 hover:text-orange-600 rounded-lg transition-colors"
+            >
+                <ChefHat className="w-4 h-4" /> Vista Cocina
+            </button>
+
+            <button 
+                onClick={() => navigate('/admin')} // Ajusta a tu ruta de admin
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-orange-50 hover:text-orange-600 rounded-lg transition-colors"
+            >
+                <LayoutDashboard className="w-4 h-4" /> Vista Admin
+            </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+</file>
+
+<file path="components/History.tsx">
+import { useEffect, useState } from 'react';
+import { supabase } from '../services/supabase';
+import { History as HistoryIcon, Search, Calendar, Filter, FileText, User, Tag, Lock } from 'lucide-react';
+
+export default function History() {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDemo, setIsDemo] = useState(false);
+
+  useEffect(() => {
+    fetchLogs();
+  }, []);
+
+  const fetchLogs = async () => {
+    setLoading(true);
+    
+    // 1. Verificar identidad
+    const { data: { user } } = await supabase.auth.getUser();
+    const email = user?.email || '';
+    
+    if (email.toLowerCase().includes('demo')) {
+        setIsDemo(true);
+        generateFakeLogs(); // Generar datos falsos
+    } else {
+        setIsDemo(false);
+        fetchRealLogs(); // Buscar datos reales
+    }
+  };
+
+  const fetchRealLogs = async () => {
+    const { data, error } = await supabase
+        .from('audit_logs')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100); // Traemos los últimos 100 para no saturar
+
+    if (error) {
+        console.error("Error cargando historial:", error);
+    } else {
+        setLogs(data || []);
+    }
+    setLoading(false);
+  };
+
+  const generateFakeLogs = () => {
+      // Simulador de datos para el Demo
+      const actions = ['LOGIN', 'LOGOUT', 'VENTA', 'CREAR_CLIENTE', 'STOCK_UPDATE', 'ELIMINAR_USUARIO'];
+      const users = ['demo@pizzaflow.com', 'cajero@pizzaflow.com', 'admin@pizzaflow.com'];
+      const modules = ['Sistema', 'Caja', 'Clientes', 'Inventario', 'Usuarios'];
+      
+      const fakeData = Array.from({ length: 20 }).map((_, i) => {
+          const randomAction = actions[Math.floor(Math.random() * actions.length)];
+          return {
+              id: `fake-${i}`,
+              created_at: new Date(Date.now() - Math.floor(Math.random() * 1000000000)).toISOString(),
+              user_email: users[Math.floor(Math.random() * users.length)],
+              action: randomAction,
+              details: `Simulación de acción ${randomAction} número #${Math.floor(Math.random() * 1000)}`,
+              module: modules[Math.floor(Math.random() * modules.length)]
+          };
+      });
+      
+      // Ordenar por fecha
+      fakeData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      setLogs(fakeData);
+      setLoading(false);
+  };
+
+  const filteredLogs = logs.filter(log => 
+    log.user_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    log.action?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    log.details?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const getActionColor = (action: string) => {
+      if (action.includes('LOGIN')) return 'bg-green-100 text-green-700';
+      if (action.includes('LOGOUT')) return 'bg-gray-100 text-gray-700';
+      if (action.includes('VENTA')) return 'bg-blue-100 text-blue-700';
+      if (action.includes('ELIMINAR')) return 'bg-red-100 text-red-700';
+      if (action.includes('STOCK')) return 'bg-orange-100 text-orange-700';
+      return 'bg-purple-100 text-purple-700';
+  };
+
+  if (loading) return <div className="p-8 text-center text-gray-500 animate-pulse">Cargando historial de movimientos...</div>;
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <HistoryIcon className="text-gray-600"/> Historial de Movimientos
+        </h2>
+        <div className="text-sm text-gray-400">
+            Últimos 100 registros
+        </div>
+      </div>
+
+      {isDemo && (
+          <div className="mb-4 bg-orange-50 text-orange-800 p-3 rounded-lg flex items-center gap-2 text-sm border border-orange-200">
+              <Lock size={16} />
+              <span><strong>Modo Simulación:</strong> Estos datos son generados aleatoriamente para demostración.</span>
+          </div>
+      )}
+
+      {/* Buscador */}
+      <div className="relative mb-6">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+        <input 
+          type="text" 
+          placeholder="Buscar por usuario, acción o detalle..." 
+          className="w-full pl-10 pr-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 shadow-sm"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+            <table className="w-full text-left">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                        <th className="p-4 text-xs font-bold text-gray-500 uppercase flex items-center gap-1"><Calendar size={14}/> Fecha / Hora</th>
+                        <th className="p-4 text-xs font-bold text-gray-500 uppercase"><User size={14} className="inline mr-1"/>Usuario</th>
+                        <th className="p-4 text-xs font-bold text-gray-500 uppercase"><Tag size={14} className="inline mr-1"/>Acción</th>
+                        <th className="p-4 text-xs font-bold text-gray-500 uppercase"><Filter size={14} className="inline mr-1"/>Módulo</th>
+                        <th className="p-4 text-xs font-bold text-gray-500 uppercase"><FileText size={14} className="inline mr-1"/>Detalle</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                    {filteredLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-gray-50 transition-colors text-sm">
+                            <td className="p-4 whitespace-nowrap text-gray-600">
+                                {new Date(log.created_at).toLocaleDateString()} <span className="text-gray-400">|</span> {new Date(log.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                            </td>
+                            <td className="p-4 font-medium text-gray-800">
+                                {log.user_email}
+                            </td>
+                            <td className="p-4">
+                                <span className={`px-2 py-1 rounded text-[10px] font-bold border uppercase ${getActionColor(log.action)}`}>
+                                    {log.action}
+                                </span>
+                            </td>
+                            <td className="p-4 text-gray-500">
+                                {log.module}
+                            </td>
+                            <td className="p-4 text-gray-600 max-w-md truncate" title={log.details}>
+                                {log.details}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+
+            {filteredLogs.length === 0 && (
+                <div className="p-12 text-center text-gray-400">
+                    No se encontraron registros.
+                </div>
+            )}
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="components/Inventory.tsx">
+import { useEffect, useState } from 'react';
+import { supabase } from '../services/supabase';
+import { logAction } from '../services/audit'; // <--- LOGGER
+import { Package, Search, Plus, Trash, Edit, X, Save, AlertTriangle, Lock } from 'lucide-react';
+
+export default function Inventory() {
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isDemo, setIsDemo] = useState(false);
+  
+  // Formulario
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [formData, setFormData] = useState({ name: '', price: '', category: 'Pizzas' });
+
+  const categories = ['Pizzas', 'Milanesas', 'Hamburguesas', 'Empanadas', 'Bebidas', 'Postres'];
+
+  useEffect(() => {
+    fetchProducts();
+  }, []);
+
+  const fetchProducts = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const email = user?.email || '';
+    
+    // MODO DEMO
+    if (email.toLowerCase().includes('demo')) {
+        setIsDemo(true);
+        setProducts([
+            { id: '1', name: 'Muzzarella (Demo)', price: 8000, category: 'Pizzas' },
+            { id: '2', name: 'Coca Cola 1.5L (Demo)', price: 2500, category: 'Bebidas' },
+            { id: '3', name: 'Empanada Carne (Demo)', price: 1200, category: 'Empanadas' }
+        ]);
+        setLoading(false);
+        return;
+    }
+
+    // MODO REAL
+    const { data } = await supabase.from('products').select('*').order('name');
+    if (data) setProducts(data);
+    setLoading(false);
+  };
+
+  const handleSaveProduct = async () => {
+      if (!formData.name || !formData.price) return alert("Completa los campos.");
+
+      // DEMO
+      if (isDemo) {
+          const fakeProduct = { id: Date.now(), name: formData.name, price: Number(formData.price), category: formData.category };
+          setProducts([fakeProduct, ...products]);
+          logAction('CREAR_PRODUCTO', `(Simulado) ${formData.name}`, 'Inventario');
+          setIsFormOpen(false);
+          setFormData({ name: '', price: '', category: 'Pizzas' });
+          alert("Producto creado en MEMORIA (Modo Demo)");
+          return;
+      }
+
+      // REAL
+      const { error } = await supabase.from('products').insert([{
+          name: formData.name,
+          price: Number(formData.price),
+          category: formData.category
+      }]);
+
+      if (error) {
+          alert("Error: " + error.message);
+      } else {
+          await logAction('CREAR_PRODUCTO', `Nuevo: ${formData.name} ($${formData.price})`, 'Inventario');
+          fetchProducts();
+          setIsFormOpen(false);
+          setFormData({ name: '', price: '', category: 'Pizzas' });
+      }
+  };
+
+  const handleDeleteProduct = async (id: any, name: string) => {
+      if (!confirm("¿Borrar producto?")) return;
+
+      if (isDemo) {
+          setProducts(products.filter(p => p.id !== id));
+          logAction('ELIMINAR_PRODUCTO', `(Simulado) ${name}`, 'Inventario');
+          return;
+      }
+
+      const { error } = await supabase.from('products').delete().eq('id', id);
+      if (error) alert("Error: " + error.message);
+      else {
+          await logAction('ELIMINAR_PRODUCTO', `Borrado: ${name}`, 'Inventario');
+          fetchProducts();
+      }
+  };
+
+  const filteredProducts = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Cargando inventario...</div>;
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <Package className="text-blue-600"/> Inventario
+        </h2>
+        <button onClick={() => setIsFormOpen(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700 transition-colors">
+            <Plus size={20}/> Nuevo Producto
+        </button>
+      </div>
+
+      {isDemo && (
+          <div className="mb-4 bg-orange-50 text-orange-800 p-3 rounded-lg flex items-center gap-2 text-sm border border-orange-200">
+              <Lock size={16} />
+              <span><strong>Modo Demo:</strong> Los productos creados aquí no se guardan en la base de datos.</span>
+          </div>
+      )}
+
+      {/* FORMULARIO MODAL */}
+      {isFormOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
+                  <h3 className="text-xl font-bold mb-4">Nuevo Producto</h3>
+                  <div className="space-y-3">
+                      <input placeholder="Nombre (Ej: Pizza Rúcula)" className="w-full p-2 border rounded" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                      <input type="number" placeholder="Precio (Ej: 12000)" className="w-full p-2 border rounded" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} />
+                      <select className="w-full p-2 border rounded bg-white" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                          {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                      <button onClick={() => setIsFormOpen(false)} className="flex-1 py-2 text-gray-500 hover:bg-gray-100 rounded">Cancelar</button>
+                      <button onClick={handleSaveProduct} className="flex-1 py-2 bg-blue-600 text-white font-bold rounded hover:bg-blue-700">Guardar</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-4 border-b border-gray-100 bg-gray-50">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18}/>
+                <input placeholder="Buscar producto..." className="w-full pl-9 p-2 border rounded-lg" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+            </div>
+          </div>
+          <table className="w-full text-left">
+              <thead className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500">
+                  <tr>
+                      <th className="p-4">Producto</th>
+                      <th className="p-4">Categoría</th>
+                      <th className="p-4 text-right">Precio</th>
+                      <th className="p-4 text-center">Acciones</th>
+                  </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                  {filteredProducts.map(product => (
+                      <tr key={product.id} className="hover:bg-gray-50">
+                          <td className="p-4 font-medium">{product.name}</td>
+                          <td className="p-4"><span className="text-xs bg-gray-100 px-2 py-1 rounded">{product.category}</span></td>
+                          <td className="p-4 text-right font-bold text-gray-700">$ {product.price.toLocaleString()}</td>
+                          <td className="p-4 text-center">
+                              <button onClick={() => handleDeleteProduct(product.id, product.name)} className="text-red-400 hover:text-red-600 p-2 hover:bg-red-50 rounded"><Trash size={18}/></button>
+                          </td>
+                      </tr>
+                  ))}
+              </tbody>
+          </table>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="components/Kitchen.tsx">
+import { useEffect, useState } from 'react';
+import { supabase } from '../services/supabase';
+import { CheckCircle, Clock, RefreshCw, AlertTriangle, ChefHat, XCircle } from 'lucide-react';
+
+export default function Kitchen() {
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Cargamos pedidos
+  const fetchOrders = async () => {
+    setLoading(true);
+    let allOrders: any[] = [];
+
+    // 0. VERIFICAR QUIÉN ESTÁ MIRANDO LA PANTALLA
+    const { data: { user } } = await supabase.auth.getUser();
+    const currentUserEmail = user?.email?.toLowerCase() || '';
+    const isDemoUser = currentUserEmail.includes('demo');
+
+    // 1. PEDIDOS REALES (Supabase)
+    try {
+        const { data: realOrders } = await supabase
+        .from('orders')
+        .select(`
+            *,
+            client:clients(name),
+            order_items (
+                quantity,
+                product:products(name)
+            )
+        `)
+        .eq('status', 'pendiente')
+        .order('created_at', { ascending: true });
+
+        if (realOrders) allOrders = [...realOrders];
+    } catch (error) {
+        console.error("Error cargando pedidos reales:", error);
+    }
+
+    // 2. PEDIDOS SIMULADOS (localStorage) - ¡SOLO SI SOY DEMO!
+    if (isDemoUser) {
+        try {
+            const demoOrdersRaw = localStorage.getItem('demo_orders');
+            if (demoOrdersRaw) {
+                const demoOrders = JSON.parse(demoOrdersRaw);
+                const pendingDemo = demoOrders.filter((o: any) => o.status === 'pendiente');
+                allOrders = [...allOrders, ...pendingDemo];
+            }
+        } catch (e) {
+            console.warn("Error leyendo pedidos demo");
+        }
+    }
+
+    // Ordenar todos por fecha
+    allOrders.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    setOrders(allOrders);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchOrders();
+
+    const handleStorageChange = () => fetchOrders();
+    window.addEventListener('storage', handleStorageChange);
+
+    const interval = setInterval(fetchOrders, 30000);
+
+    return () => {
+        clearInterval(interval);
+        window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []);
+
+  // --- ACCIÓN: COMPLETAR (LISTO) ---
+  const handleCompleteOrder = async (orderId: string) => {
+    // Si es Demo
+    if (orderId.toString().startsWith('demo-')) {
+        const demoOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]');
+        const updatedDemoOrders = demoOrders.map((o: any) => 
+            o.id === orderId ? { ...o, status: 'completado' } : o
+        );
+        localStorage.setItem('demo_orders', JSON.stringify(updatedDemoOrders));
+        fetchOrders();
+        return;
+    }
+
+    // Si es Real
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'completado' })
+      .eq('id', orderId);
+
+    if (error) {
+      alert("Error al completar: " + error.message);
+    } else {
+      fetchOrders();
+    }
+  };
+
+  // --- ACCIÓN: CANCELAR ---
+  const handleCancelOrder = async (orderId: string) => {
+    if (!confirm("¿Cancelar este pedido? Desaparecerá de la pantalla.")) return;
+
+    // Si es Demo
+    if (orderId.toString().startsWith('demo-')) {
+        const demoOrders = JSON.parse(localStorage.getItem('demo_orders') || '[]');
+        const updatedDemoOrders = demoOrders.map((o: any) => 
+            o.id === orderId ? { ...o, status: 'cancelado' } : o
+        );
+        localStorage.setItem('demo_orders', JSON.stringify(updatedDemoOrders));
+        fetchOrders();
+        return;
+    }
+
+    // Si es Real
+    const { error } = await supabase
+      .from('orders')
+      .update({ status: 'cancelado' })
+      .eq('id', orderId);
+
+    if (error) {
+      alert("Error al cancelar: " + error.message);
+    } else {
+      fetchOrders();
+    }
+  };
+
+  if (loading) return <div className="p-10 text-center text-white animate-pulse">Cargando comandas...</div>;
+
+  return (
+    <div className="p-6 h-full overflow-y-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-white flex items-center gap-3">
+          <ChefHat size={32} /> Comandas de Cocina
+        </h2>
+        <button 
+          onClick={fetchOrders} 
+          className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-full transition-colors"
+          title="Actualizar"
+        >
+          <RefreshCw size={20} />
+        </button>
+      </div>
+
+      {orders.length === 0 ? (
+        <div className="text-center text-gray-400 mt-20">
+          <CheckCircle size={64} className="mx-auto mb-4 opacity-50"/>
+          <p className="text-xl">Todo limpio, chef.</p>
+          <p className="text-sm">No hay pedidos pendientes.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {orders.map((order) => {
+            const isDemo = order.id.toString().startsWith('demo-');
+            return (
+                <div key={order.id} className={`rounded-xl shadow-lg border-l-4 overflow-hidden flex flex-col ${isDemo ? 'bg-orange-50 border-orange-500' : 'bg-white border-blue-500'}`}>
+                {/* Header */}
+                <div className={`p-3 border-b flex justify-between items-start ${isDemo ? 'bg-orange-100' : 'bg-gray-50'}`}>
+                    <div>
+                    <h3 className="font-bold text-lg text-gray-800">
+                        #{order.ticket_number} 
+                        {isDemo && <span className="ml-2 text-[10px] bg-orange-200 text-orange-800 px-1.5 py-0.5 rounded border border-orange-300">DEMO</span>}
+                    </h3>
+                    <p className="text-xs text-gray-500 font-medium truncate w-32 md:w-40">{order.client?.name || 'Cliente'}</p>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-gray-500 bg-white px-2 py-1 rounded-full border border-gray-200">
+                    <Clock size={12} />
+                    <span>{new Date(order.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                    </div>
+                </div>
+
+                {/* Items */}
+                <div className="p-4 flex-1">
+                    <ul className="space-y-3">
+                    {order.order_items?.map((item: any, index: number) => (
+                        <li key={index} className="flex gap-3 text-sm border-b border-dashed border-gray-100 pb-2 last:border-0 last:pb-0">
+                        <span className="font-bold bg-gray-100 text-gray-800 w-6 h-6 flex items-center justify-center rounded-full text-xs flex-shrink-0">
+                            {item.quantity}
+                        </span>
+                        <span className="text-gray-700 leading-tight">
+                            {item.product?.name}
+                        </span>
+                        </li>
+                    ))}
+                    </ul>
+                </div>
+
+                {/* --- AQUÍ ESTÁN LOS 2 BOTONES --- */}
+                <div className="p-3 bg-gray-50 border-t flex gap-2">
+                    {/* BOTÓN 1: CANCELAR (Rojo) */}
+                    <button 
+                        onClick={() => handleCancelOrder(order.id)}
+                        className="px-4 rounded-lg font-bold text-red-500 bg-red-50 border border-red-100 hover:bg-red-100 hover:text-red-700 transition-colors flex items-center justify-center"
+                        title="Cancelar Pedido"
+                    >
+                        <XCircle size={20} />
+                    </button>
+
+                    {/* BOTÓN 2: LISTO (Verde/Naranja) */}
+                    <button 
+                        onClick={() => handleCompleteOrder(order.id)}
+                        className={`flex-1 py-3 rounded-lg font-bold text-white shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${isDemo ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}
+                    >
+                        <CheckCircle size={18} /> Listo
+                    </button>
+                </div>
+                </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+</file>
+
+<file path="components/Login.tsx">
+import React, { useState } from 'react';
+import { supabase } from '../services/supabase';
+import { Pizza, ChefHat, ArrowRight, Lock } from 'lucide-react';
+
+export const Login = () => {
+  const [loading, setLoading] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError(null);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: 'demo@pizzaflow.com', // Asegúrate de haber creado este usuario en Supabase
+        password: 'pizza123',
+      });
+      if (error) throw error;
+    } catch (error: any) {
+      setError("Error al ingresar con la demo: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+      <div className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-gray-700">
+        
+        {/* Header */}
+        <div className="bg-orange-600 p-8 text-center">
+          <div className="flex justify-center mb-4">
+            <div className="bg-white p-3 rounded-full shadow-lg">
+              <Pizza className="w-10 h-10 text-orange-600" />
+            </div>
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">PizzaFlow</h1>
+          <p className="text-orange-100">Sistema de Gestión Profesional</p>
+        </div>
+
+        {/* Body */}
+        <div className="p-8">
+          <form onSubmit={handleLogin} className="space-y-6">
+            
+            {error && (
+              <div className="bg-red-500/10 border border-red-500 text-red-500 p-3 rounded text-sm text-center">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-gray-400 text-sm font-bold mb-2">Email Corporativo</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg py-3 px-4 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors"
+                placeholder="admin@pizzeria.com"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-400 text-sm font-bold mb-2">Contraseña</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-gray-700 text-white border border-gray-600 rounded-lg py-3 px-4 focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-colors"
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg focus:outline-none transition duration-300 flex items-center justify-center gap-2"
+            >
+              {loading ? 'Cargando...' : (
+                <>
+                  <Lock className="w-4 h-4" /> Iniciar Sesión
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Separador */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-gray-700"></div>
+            </div>
+            <div className="relative flex justify-center text-sm">
+              <span className="px-2 bg-gray-800 text-gray-500">¿Solo quieres mirar?</span>
+            </div>
+          </div>
+
+          {/* BOTÓN DEMO */}
+          <button
+            onClick={handleDemoLogin}
+            disabled={loading}
+            className="w-full bg-white hover:bg-gray-100 text-gray-900 font-bold py-3 px-4 rounded-lg focus:outline-none transition duration-300 flex items-center justify-center gap-2"
+          >
+             <ChefHat className="w-5 h-5 text-orange-600" />
+             Acceso Demo (Invitado)
+             <ArrowRight className="w-4 h-4 ml-auto text-gray-400" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+</file>
+
+<file path="components/POS.tsx">
+import React, { useState, useMemo, useEffect } from 'react';
+import { useApp } from '../context/AppContext';
+import { Product, OrderItem, Order, OrderStatus, Customer } from '../types';
+import { Plus, Minus, Trash2, CheckCircle, Receipt, ShoppingCart, User as UserIcon, X, Tag } from 'lucide-react';
+
+const POS: React.FC = () => {
+  const { products, addOrder, currentUser, customers, addCustomer, promotions } = useApp();
+  const [cart, setCart] = useState<OrderItem[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [lastOrder, setLastOrder] = useState<Order | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
+  const [newCustomerData, setNewCustomerData] = useState({ firstName: '', lastName: '', phone: '', address: '' });
+
+  const categories = [
+    { id: 'all', label: 'Todo' },
+    { id: 'pizza', label: 'Pizzas' },
+    { id: 'side', label: 'Acompañantes' },
+    { id: 'drink', label: 'Bebidas' },
+    { id: 'dessert', label: 'Postres' },
+  ];
+
+  const formatPrice = (val: number) => {
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(val);
+  };
+
+  const filteredProducts = useMemo(() => {
+    return selectedCategory === 'all' 
+      ? products.filter(p => p.active)
+      : products.filter(p => p.active && p.category === selectedCategory);
+  }, [products, selectedCategory]);
+
+  const addToCart = (product: Product) => {
+    setCart(prev => {
+      const existing = prev.find(item => item.productId === product.id);
+      if (existing) {
+        return prev.map(item => 
+          item.productId === product.id 
+            ? { ...item, quantity: item.quantity + 1 } 
+            : item
+        );
+      }
+      return [...prev, { productId: product.id, productName: product.name, price: product.price, quantity: 1 }];
+    });
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart(prev => prev.filter(item => item.productId !== productId));
+  };
+
+  const updateQuantity = (productId: string, delta: number) => {
+    setCart(prev => prev.map(item => {
+      if (item.productId === productId) {
+        return { ...item, quantity: Math.max(1, item.quantity + delta) };
+      }
+      return item;
+    }));
+  };
+
+  // Calculate Totals and Discounts
+  const { subtotal, discount, total, appliedPromos } = useMemo(() => {
+    let subtotal = 0;
+    cart.forEach(item => subtotal += item.price * item.quantity);
+    
+    let totalDiscount = 0;
+    const activePromos = promotions.filter(p => p.active);
+    const appliedPromos: string[] = [];
+
+    // Simple Discounts (Per Item)
+    activePromos.filter(p => p.type === 'SIMPLE').forEach(promo => {
+        const targetId = promo.targetProductIds[0];
+        const cartItem = cart.find(i => i.productId === targetId);
+        if (cartItem) {
+            let itemDiscount = 0;
+            if (promo.discountType === 'PERCENTAGE') {
+                itemDiscount = (cartItem.price * (promo.discountValue / 100)) * cartItem.quantity;
+            } else {
+                itemDiscount = promo.discountValue * cartItem.quantity;
+            }
+            totalDiscount += itemDiscount;
+            appliedPromos.push(promo.name);
+        }
+    });
+
+    // Combo Discounts (Simplistic logic: If all items in combo are present, apply discount once per set)
+    activePromos.filter(p => p.type === 'COMBO').forEach(promo => {
+        const requiredIds = promo.targetProductIds;
+        // Find minimum quantity of sets available in cart
+        const possibleSets = requiredIds.map(reqId => {
+            const item = cart.find(i => i.productId === reqId);
+            return item ? item.quantity : 0;
+        });
+        const setsCount = Math.min(...possibleSets);
+
+        if (setsCount > 0) {
+            let comboDiscount = 0;
+            // Calculate base price of the combo items to apply percentage
+            let comboBasePrice = 0;
+            requiredIds.forEach(id => {
+                const item = cart.find(i => i.productId === id);
+                if(item) comboBasePrice += item.price;
+            });
+
+            if (promo.discountType === 'PERCENTAGE') {
+                comboDiscount = (comboBasePrice * (promo.discountValue / 100)) * setsCount;
+            } else {
+                comboDiscount = promo.discountValue * setsCount;
+            }
+            totalDiscount += comboDiscount;
+            appliedPromos.push(`${promo.name} (x${setsCount})`);
+        }
+    });
+
+    // Ensure total isn't negative
+    const finalTotal = Math.max(0, subtotal - totalDiscount);
+
+    return { subtotal, discount: totalDiscount, total: finalTotal, appliedPromos };
+  }, [cart, promotions]);
+
+  const handleCreateCustomer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustomerData.firstName) return;
+    const newC: Customer = {
+      ...newCustomerData,
+      id: Date.now().toString(),
+      createdAt: Date.now()
+    };
+    addCustomer(newC);
+    setSelectedCustomer(newC);
+    setIsCustomerModalOpen(false);
+    setNewCustomerData({ firstName: '', lastName: '', phone: '', address: '' });
+  };
+
+  const handleCheckout = () => {
+    if (cart.length === 0 || !currentUser) return;
+
+    const newOrder: Order = {
+      id: Math.random().toString(36).substr(2, 9).toUpperCase(),
+      items: [...cart],
+      subtotal,
+      discount,
+      total,
+      status: OrderStatus.PENDING,
+      createdBy: currentUser.id,
+      createdByName: currentUser.name,
+      createdAt: Date.now(),
+      customerId: selectedCustomer?.id,
+      customerName: selectedCustomer ? `${selectedCustomer.firstName} ${selectedCustomer.lastName}` : 'Consumidor Final'
+    };
+
+    addOrder(newOrder);
+    setLastOrder(newOrder);
+    setCart([]);
+    setSelectedCustomer(null);
+  };
+
+  return (
+    <div className="flex h-full flex-col md:flex-row gap-4 p-4 overflow-hidden">
+      {/* Product Grid */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+          {categories.map(cat => (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`px-4 py-2 rounded-full whitespace-nowrap transition-colors text-sm font-medium ${
+                selectedCategory === cat.id 
+                  ? 'bg-orange-600 text-white shadow-md' 
+                  : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+              }`}
+            >
+              {cat.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 overflow-y-auto pr-2 pb-20 md:pb-0">
+          {filteredProducts.map(product => (
+            <button
+              key={product.id}
+              onClick={() => addToCart(product)}
+              className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 hover:border-orange-300 hover:shadow-md transition-all text-left flex flex-col justify-between group h-48"
+            >
+              <div>
+                <h3 className="font-bold text-gray-800 group-hover:text-orange-600">{product.name}</h3>
+                <p className="text-xs text-gray-500 mt-1 line-clamp-2">{product.description}</p>
+              </div>
+              <div className="flex justify-between items-end mt-4">
+                <span className="font-bold text-lg text-gray-900">{formatPrice(product.price)}</span>
+                <div className="bg-orange-100 text-orange-600 p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Plus size={16} />
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Cart Sidebar */}
+      <div className="w-full md:w-96 bg-white rounded-xl shadow-lg border border-gray-200 flex flex-col h-[40vh] md:h-full">
+        {/* Customer Selector */}
+        <div className="p-3 bg-gray-50 border-b border-gray-200">
+           {selectedCustomer ? (
+             <div className="flex justify-between items-center bg-white border border-green-200 p-2 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <UserIcon size={16} className="text-green-600" />
+                  <div>
+                    <p className="text-sm font-bold text-gray-800">{selectedCustomer.firstName} {selectedCustomer.lastName}</p>
+                    <p className="text-xs text-gray-500">{selectedCustomer.address}</p>
+                  </div>
+                </div>
+                <button onClick={() => setSelectedCustomer(null)} className="text-gray-400 hover:text-red-500"><X size={16}/></button>
+             </div>
+           ) : (
+             <div className="flex gap-2">
+                <select 
+                  className="flex-1 text-sm border-gray-300 rounded-lg p-2 border"
+                  onChange={(e) => {
+                     const c = customers.find(cus => cus.id === e.target.value);
+                     if(c) setSelectedCustomer(c);
+                  }}
+                  value=""
+                >
+                  <option value="" disabled>Seleccionar Cliente...</option>
+                  {customers.map(c => (
+                    <option key={c.id} value={c.id}>{c.firstName} {c.lastName}</option>
+                  ))}
+                </select>
+                <button 
+                  onClick={() => setIsCustomerModalOpen(true)}
+                  className="bg-gray-200 hover:bg-gray-300 p-2 rounded-lg text-gray-700"
+                  title="Nuevo Cliente"
+                >
+                  <Plus size={18} />
+                </button>
+             </div>
+           )}
+        </div>
+
+        <div className="p-4 border-b border-gray-100 bg-white">
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <ShoppingCart size={20} className="text-orange-500" />
+            Orden Actual
+          </h2>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {cart.length === 0 ? (
+            <div className="text-center text-gray-400 mt-10">
+              <p>El carrito está vacío</p>
+              <p className="text-xs mt-2">Selecciona productos para comenzar</p>
+            </div>
+          ) : (
+            cart.map(item => (
+              <div key={item.productId} className="flex justify-between items-center group">
+                <div className="flex-1">
+                  <p className="font-medium text-gray-800">{item.productName}</p>
+                  <p className="text-xs text-gray-500">{formatPrice(item.price)} c/u</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                    <button onClick={() => updateQuantity(item.productId, -1)} className="p-1 hover:bg-white rounded shadow-sm"><Minus size={12} /></button>
+                    <span className="text-sm font-semibold w-4 text-center">{item.quantity}</span>
+                    <button onClick={() => updateQuantity(item.productId, 1)} className="p-1 hover:bg-white rounded shadow-sm"><Plus size={12} /></button>
+                  </div>
+                  <button onClick={() => removeFromCart(item.productId)} className="text-gray-400 hover:text-red-500">
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        
+        {/* Discounts Section */}
+        {appliedPromos.length > 0 && (
+          <div className="px-4 py-2 bg-yellow-50 border-t border-yellow-100">
+            <p className="text-xs font-bold text-yellow-700 mb-1 flex items-center gap-1">
+              <Tag size={12} /> Promociones Aplicadas:
+            </p>
+            {appliedPromos.map((p, i) => (
+              <p key={i} className="text-xs text-yellow-600 ml-4">• {p}</p>
+            ))}
+          </div>
+        )}
+
+        <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-xl space-y-2">
+          <div className="flex justify-between items-center text-sm text-gray-500">
+            <span>Subtotal</span>
+            <span>{formatPrice(subtotal)}</span>
+          </div>
+          {discount > 0 && (
+            <div className="flex justify-between items-center text-sm text-green-600 font-medium">
+              <span>Descuento</span>
+              <span>- {formatPrice(discount)}</span>
+            </div>
+          )}
+          <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+            <span className="text-gray-900 font-bold text-lg">Total</span>
+            <span className="text-2xl font-bold text-orange-600">{formatPrice(total)}</span>
+          </div>
+          <button
+            onClick={handleCheckout}
+            disabled={cart.length === 0}
+            className={`w-full py-3 rounded-lg font-bold text-white flex items-center justify-center gap-2 transition-all ${
+              cart.length === 0 
+                ? 'bg-gray-300 cursor-not-allowed' 
+                : 'bg-orange-600 hover:bg-orange-700 shadow-lg hover:shadow-orange-200'
+            }`}
+          >
+            Confirmar Pedido
+          </button>
+        </div>
+      </div>
+
+      {/* New Customer Modal */}
+      {isCustomerModalOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl">
+            <h3 className="font-bold text-lg mb-4">Registro Rápido de Cliente</h3>
+            <form onSubmit={handleCreateCustomer} className="space-y-3">
+              <input 
+                placeholder="Nombre" 
+                className="w-full border p-2 rounded" 
+                value={newCustomerData.firstName} 
+                onChange={e => setNewCustomerData({...newCustomerData, firstName: e.target.value})} 
+              />
+              <input 
+                placeholder="Apellido" 
+                className="w-full border p-2 rounded" 
+                value={newCustomerData.lastName} 
+                onChange={e => setNewCustomerData({...newCustomerData, lastName: e.target.value})} 
+              />
+              <input 
+                placeholder="Teléfono" 
+                className="w-full border p-2 rounded" 
+                value={newCustomerData.phone} 
+                onChange={e => setNewCustomerData({...newCustomerData, phone: e.target.value})} 
+              />
+              <input 
+                placeholder="Dirección" 
+                className="w-full border p-2 rounded" 
+                value={newCustomerData.address} 
+                onChange={e => setNewCustomerData({...newCustomerData, address: e.target.value})} 
+              />
+              <div className="flex gap-2 pt-2">
+                <button type="button" onClick={() => setIsCustomerModalOpen(false)} className="flex-1 bg-gray-200 py-2 rounded">Cancelar</button>
+                <button type="submit" className="flex-1 bg-orange-600 text-white py-2 rounded">Guardar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Ticket Modal */}
+      {lastOrder && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl relative animate-in fade-in zoom-in duration-300">
+            <div className="text-center mb-6 border-b border-dashed border-gray-300 pb-4">
+              <h2 className="text-xl font-bold uppercase tracking-wider">PizzaFlow</h2>
+              <p className="text-xs text-gray-500">Ticket de Venta</p>
+              <p className="text-sm font-mono mt-2">Orden #{lastOrder.id.slice(-6)}</p>
+              <p className="text-xs text-gray-400">{new Date(lastOrder.createdAt).toLocaleString()}</p>
+              {lastOrder.customerName && <p className="text-xs text-gray-600 mt-1">Cliente: {lastOrder.customerName}</p>}
+            </div>
+            
+            <div className="space-y-2 mb-6 font-mono text-sm">
+              {lastOrder.items.map((item, idx) => (
+                <div key={idx} className="flex justify-between">
+                  <span>{item.quantity}x {item.productName}</span>
+                  <span>{formatPrice(item.price * item.quantity)}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-dashed border-gray-300 pt-4 text-sm">
+               <div className="flex justify-between text-gray-500">
+                 <span>Subtotal</span>
+                 <span>{formatPrice(lastOrder.subtotal)}</span>
+               </div>
+               {lastOrder.discount > 0 && (
+                 <div className="flex justify-between text-gray-500">
+                   <span>Descuento</span>
+                   <span>-{formatPrice(lastOrder.discount)}</span>
+                 </div>
+               )}
+               <div className="flex justify-between font-bold text-lg mt-2">
+                 <span>Total</span>
+                 <span>{formatPrice(lastOrder.total)}</span>
+               </div>
+            </div>
+            
+            <div className="flex flex-col gap-2 mt-6">
+              <button 
+                onClick={() => window.print()} 
+                className="w-full bg-gray-900 text-white py-2 rounded flex items-center justify-center gap-2 hover:bg-gray-800"
+              >
+                <Receipt size={16} /> Imprimir
+              </button>
+              <button 
+                onClick={() => setLastOrder(null)} 
+                className="w-full bg-orange-100 text-orange-700 py-2 rounded hover:bg-orange-200"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default POS;
+</file>
+
+<file path="components/Promotions.tsx">
+import { useEffect, useState } from 'react';
+import { supabase } from '../services/supabase';
+import { logAction } from '../services/audit'; // <--- LOGGER
+import { Percent, Plus, Trash, Tag, Lock, AlertTriangle } from 'lucide-react';
+
+export default function Promotions() {
+  const [promotions, setPromotions] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]); // Necesario para crear promos
+  const [loading, setLoading] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
+  
+  // Formulario
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [formData, setFormData] = useState({ name: '', discount: 10, prod1: '', prod2: '' });
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const email = user?.email || '';
+    
+    // Cargar productos siempre (necesarios para el select)
+    const { data: prodData } = await supabase.from('products').select('*');
+    if (prodData) setProducts(prodData);
+
+    // MODO DEMO
+    if (email.toLowerCase().includes('demo')) {
+        setIsDemo(true);
+        setPromotions([
+            { id: '1', name: 'Martes de Locos (Demo)', discount_percentage: 20 },
+            { id: '2', name: 'Promo Pareja (Demo)', discount_percentage: 15 }
+        ]);
+        setLoading(false);
+        return;
+    }
+
+    // MODO REAL
+    const { data } = await supabase.from('promotions').select('*');
+    if (data) setPromotions(data);
+    setLoading(false);
+  };
+
+  const handleSavePromo = async () => {
+      if (!formData.name || !formData.prod1) return alert("Nombre y al menos 1 producto requeridos.");
+
+      // DEMO
+      if (isDemo) {
+          const fakePromo = { id: Date.now(), name: formData.name, discount_percentage: formData.discount };
+          setPromotions([fakePromo, ...promotions]);
+          logAction('CREAR_PROMO', `(Simulado) ${formData.name} (${formData.discount}%)`, 'Promociones');
+          setIsFormOpen(false);
+          alert("Promoción creada en MEMORIA (Modo Demo)");
+          return;
+      }
+
+      // REAL
+      const { error } = await supabase.from('promotions').insert([{
+          name: formData.name,
+          discount_percentage: formData.discount,
+          product_1_id: formData.prod1,
+          product_2_id: formData.prod2 || null
+      }]);
+
+      if (error) {
+          alert("Error: " + error.message);
+      } else {
+          await logAction('CREAR_PROMO', `Nueva: ${formData.name} (${formData.discount}%)`, 'Promociones');
+          fetchData(); // Recargar real
+          setIsFormOpen(false);
+      }
+  };
+
+  const handleDeletePromo = async (id: any, name: string) => {
+      if (!confirm("¿Borrar promoción?")) return;
+
+      if (isDemo) {
+          setPromotions(promotions.filter(p => p.id !== id));
+          logAction('ELIMINAR_PROMO', `(Simulado) ${name}`, 'Promociones');
+          return;
+      }
+
+      const { error } = await supabase.from('promotions').delete().eq('id', id);
+      if (error) alert("Error: " + error.message);
+      else {
+          await logAction('ELIMINAR_PROMO', `Borrada: ${name}`, 'Promociones');
+          fetchData();
+      }
+  };
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Cargando promociones...</div>;
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <Percent className="text-purple-600"/> Promociones Activas
+        </h2>
+        <button onClick={() => setIsFormOpen(true)} className="bg-purple-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-purple-700 transition-colors">
+            <Plus size={20}/> Nueva Promo
+        </button>
+      </div>
+
+      {isDemo && (
+          <div className="mb-4 bg-orange-50 text-orange-800 p-3 rounded-lg flex items-center gap-2 text-sm border border-orange-200">
+              <Lock size={16} />
+              <span><strong>Modo Demo:</strong> Las promociones son ficticias.</span>
+          </div>
+      )}
+
+      {/* FORMULARIO MODAL */}
+      {isFormOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+              <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-sm">
+                  <h3 className="text-xl font-bold mb-4">Nueva Promoción</h3>
+                  <div className="space-y-3">
+                      <input placeholder="Nombre (Ej: 2x1 Muzza)" className="w-full p-2 border rounded" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                      
+                      <div className="flex items-center gap-2">
+                          <label className="text-sm font-bold text-gray-500 w-24">Descuento %</label>
+                          <input type="number" className="w-full p-2 border rounded" value={formData.discount} onChange={e => setFormData({...formData, discount: Number(e.target.value)})} />
+                      </div>
+
+                      <select className="w-full p-2 border rounded bg-white" value={formData.prod1} onChange={e => setFormData({...formData, prod1: e.target.value})}>
+                          <option value="">Seleccionar Producto 1 (Obligatorio)</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+
+                      <select className="w-full p-2 border rounded bg-white" value={formData.prod2} onChange={e => setFormData({...formData, prod2: e.target.value})}>
+                          <option value="">Seleccionar Producto 2 (Opcional)</option>
+                          {products.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                  </div>
+                  <div className="flex gap-2 mt-4">
+                      <button onClick={() => setIsFormOpen(false)} className="flex-1 py-2 text-gray-500 hover:bg-gray-100 rounded">Cancelar</button>
+                      <button onClick={handleSavePromo} className="flex-1 py-2 bg-purple-600 text-white font-bold rounded hover:bg-purple-700">Crear</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {promotions.map(promo => (
+              <div key={promo.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex justify-between items-center group">
+                  <div>
+                      <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                          <Tag size={18} className="text-purple-500"/> {promo.name}
+                      </h3>
+                      <span className="inline-block mt-2 bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-bold">
+                          {promo.discount_percentage}% OFF
+                      </span>
+                  </div>
+                  <button onClick={() => handleDeletePromo(promo.id, promo.name)} className="text-gray-300 hover:text-red-500 transition-colors">
+                      <Trash size={20}/>
+                  </button>
+              </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="components/RegisterUser.tsx">
+import React, { useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../services/supabase'; // Tu cliente normal
+import { UserPlus, Save, X } from 'lucide-react';
+
+// Credenciales para la conexión temporal
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+export const RegisterUser = ({ onClose }: { onClose: () => void }) => {
+  const [loading, setLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    name: '',
+    role: 'kitchen' // 'kitchen' | 'cashier' | 'admin'
+  });
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      // 1. TRUCO: Crear un cliente temporal para no cerrar sesión al admin
+      const tempSupabase = createClient(supabaseUrl, supabaseKey);
+
+      // 2. Crear el usuario en Autenticación
+      const { data: authData, error: authError } = await tempSupabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+      });
+
+      if (authError) throw authError;
+      if (!authData.user) throw new Error("No se pudo crear el usuario");
+
+      // 3. Guardar los datos extra (Nombre y Rol) en tu tabla 'users'
+      // Usamos el cliente 'supabase' normal porque ese tiene permisos de Admin
+      const { error: profileError } = await supabase
+        .from('profiles') // Asegúrate de que tu tabla se llame 'users' o 'profiles'
+        .insert([
+          {
+            id: authData.user.id, // Vinculamos con el ID de autenticación
+            email: formData.email,
+            name: formData.name,
+            role: formData.role,
+            active: true
+          }
+        ]);
+
+      if (profileError) throw profileError;
+
+      alert(`✅ Usuario ${formData.name} creado con éxito!`);
+      onClose(); // Cerrar el formulario
+
+    } catch (error: any) {
+      alert("Error: " + error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+        
+        <div className="bg-gray-900 p-4 flex justify-between items-center">
+          <h2 className="text-white font-bold flex items-center gap-2">
+            <UserPlus className="w-5 h-5 text-orange-500" />
+            Nuevo Empleado
+          </h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-white">
+            <X className="w-6 h-6" />
+          </button>
+        </div>
+
+        <form onSubmit={handleRegister} className="p-6 space-y-4">
+          
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Nombre</label>
+            <input
+              required
+              type="text"
+              className="w-full border rounded p-2"
+              placeholder="Ej: Juan Pérez"
+              value={formData.name}
+              onChange={e => setFormData({...formData, name: e.target.value})}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-gray-700 mb-1">Email</label>
+            <input
+              required
+              type="email"
+              className="w-full border rounded p-2"
+              placeholder="juan@pizzaflow.com"
+              value={formData.email}
+              onChange={e => setFormData({...formData, email: e.target.value})}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Contraseña</label>
+              <input
+                required
+                type="password"
+                className="w-full border rounded p-2"
+                placeholder="******"
+                value={formData.password}
+                onChange={e => setFormData({...formData, password: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 mb-1">Rol</label>
+              <select
+                className="w-full border rounded p-2 bg-white"
+                value={formData.role}
+                onChange={e => setFormData({...formData, role: e.target.value})}
+              >
+                <option value="kitchen">Cocinero 👨‍🍳</option>
+                <option value="cashier">Cajero 💰</option>
+                <option value="admin">Admin 🛡️</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 rounded-lg flex items-center justify-center gap-2 mt-4"
+          >
+            {loading ? 'Creando...' : <><Save className="w-5 h-5" /> Guardar Empleado</>}
+          </button>
+
+        </form>
+      </div>
+    </div>
+  );
+};
+</file>
+
+<file path="components/Reservations.tsx">
+import { useEffect, useState } from 'react';
+import { supabase } from '../services/supabase';
+import { logAction } from '../services/audit'; 
+import { Calendar, Clock, Users, Plus, X, Check, Search, Trash, Edit, AlertTriangle, Lock, MessageSquare } from 'lucide-react';
+
+export default function Reservations() {
+  const [reservations, setReservations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isDemo, setIsDemo] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Formulario Modal
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [formData, setFormData] = useState({
+    name: '', // CAMBIO: Ahora usamos 'name' para coincidir con la BD
+    date: new Date().toISOString().split('T')[0], 
+    time: '21:00',
+    people: 2,
+    notes: ''
+  });
+
+  useEffect(() => {
+    fetchReservations();
+  }, []);
+
+  const fetchReservations = async () => {
+    setLoading(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    const email = user?.email || '';
+
+    // === MODO SIMULACIÓN (DEMO) ===
+    if (email.toLowerCase().includes('demo')) {
+        setIsDemo(true);
+        setReservations([
+            { id: 'fake-1', name: 'Familia Gómez (Demo)', date: '2024-12-25', time: '21:00', people: 4, status: 'confirmada', notes: 'Mesa cerca de la ventana' },
+            { id: 'fake-2', name: 'Pareja Aniversario (Demo)', date: '2024-12-26', time: '20:30', people: 2, status: 'pendiente', notes: 'Traen torta' },
+            { id: 'fake-3', name: 'Grupo Trabajo (Demo)', date: '2024-12-27', time: '13:00', people: 10, status: 'cancelada', notes: '' }
+        ]);
+        setLoading(false);
+        return;
+    }
+
+    // === MODO REAL (ADMIN) ===
+    setIsDemo(false);
+    const { data, error } = await supabase
+        .from('reservations')
+        .select('*')
+        .order('date', { ascending: true })
+        .order('time', { ascending: true });
+
+    if (error) console.error(error);
+    else setReservations(data || []);
+    
+    setLoading(false);
+  };
+
+  const handleSave = async () => {
+      if (!formData.name || !formData.date || !formData.time) return alert("Completa los datos principales.");
+
+      // LÓGICA DEMO
+      if (isDemo) {
+          if (editingId) {
+              setReservations(reservations.map(r => r.id === editingId ? { ...r, ...formData } : r));
+              logAction('EDITAR_RESERVA', `(Simulado) ${formData.name}`, 'Reservas');
+          } else {
+              const newRes = { id: `fake-${Date.now()}`, ...formData, status: 'pendiente' };
+              setReservations([...reservations, newRes]);
+              logAction('CREAR_RESERVA', `(Simulado) ${formData.name} (${formData.people}p)`, 'Reservas');
+          }
+          closeForm();
+          alert("Reserva guardada en MEMORIA (Modo Demo).");
+          return;
+      }
+
+      // LÓGICA REAL
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (editingId) {
+          // Editar
+          const { error } = await supabase
+              .from('reservations')
+              .update({ 
+                  name: formData.name, // Usamos 'name'
+                  date: formData.date,
+                  time: formData.time,
+                  people: formData.people,
+                  notes: formData.notes
+              })
+              .eq('id', editingId);
+
+          if (!error) {
+              await logAction('EDITAR_RESERVA', `Editado: ${formData.name}`, 'Reservas');
+              fetchReservations();
+              closeForm();
+          } else {
+              alert("Error: " + error.message);
+          }
+      } else {
+          // Crear
+          const { error } = await supabase
+              .from('reservations')
+              .insert([{ 
+                  ...formData, 
+                  user_id: user?.id,
+                  status: 'pendiente'
+              }]);
+
+          if (!error) {
+              await logAction('CREAR_RESERVA', `Nueva: ${formData.name} (${formData.people}p)`, 'Reservas');
+              fetchReservations();
+              closeForm();
+          } else {
+              alert("Error: " + error.message);
+          }
+      }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+      if(!confirm("¿Borrar esta reserva?")) return;
+
+      if (isDemo) {
+          setReservations(reservations.filter(r => r.id !== id));
+          logAction('ELIMINAR_RESERVA', `(Simulado) ${name}`, 'Reservas');
+          return;
+      }
+
+      const { error } = await supabase.from('reservations').delete().eq('id', id);
+      if (!error) {
+          await logAction('ELIMINAR_RESERVA', `Borrada: ${name}`, 'Reservas');
+          fetchReservations();
+      } else {
+          alert("Error: " + error.message);
+      }
+  };
+
+  const handleStatusChange = async (id: string, newStatus: string, clientName: string) => {
+      if (isDemo) {
+          setReservations(reservations.map(r => r.id === id ? { ...r, status: newStatus } : r));
+          logAction('ESTADO_RESERVA', `(Simulado) ${clientName} -> ${newStatus.toUpperCase()}`, 'Reservas');
+          return;
+      }
+
+      const { error } = await supabase.from('reservations').update({ status: newStatus }).eq('id', id);
+      if (!error) {
+          await logAction('ESTADO_RESERVA', `${clientName} -> ${newStatus.toUpperCase()}`, 'Reservas');
+          fetchReservations();
+      }
+  };
+
+  const openForm = (res?: any) => {
+      if (res) {
+          setEditingId(res.id);
+          setFormData({ name: res.name, date: res.date, time: res.time, people: res.people, notes: res.notes || '' });
+      } else {
+          setEditingId(null);
+          setFormData({ name: '', date: new Date().toISOString().split('T')[0], time: '21:00', people: 2, notes: '' });
+      }
+      setIsFormOpen(true);
+  };
+
+  const closeForm = () => {
+      setIsFormOpen(false);
+      setEditingId(null);
+  };
+
+  const filteredReservations = reservations.filter(r => r.name.toLowerCase().includes(searchTerm.toLowerCase()));
+
+  const getStatusColor = (status: string) => {
+      switch(status) {
+          case 'confirmada': return 'bg-green-100 text-green-700 border-green-200';
+          case 'cancelada': return 'bg-red-100 text-red-700 border-red-200';
+          default: return 'bg-yellow-100 text-yellow-700 border-yellow-200';
+      }
+  };
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Cargando libro de reservas...</div>;
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <Calendar className="text-pink-600"/> Reservas
+        </h2>
+        <button onClick={() => openForm()} className="bg-pink-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-pink-700 transition-colors shadow-sm">
+            <Plus size={20}/> Nueva Reserva
+        </button>
+      </div>
+
+      {isDemo && (
+          <div className="mb-4 bg-orange-50 text-orange-800 p-3 rounded-lg flex items-center gap-2 text-sm border border-orange-200">
+              <Lock size={16} />
+              <span><strong>Modo Demo:</strong> Gestión de reservas simulada. No afecta la agenda real.</span>
+          </div>
+      )}
+
+      {/* FORMULARIO MODAL */}
+      {isFormOpen && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 backdrop-blur-sm animate-in fade-in">
+              <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-md">
+                  <div className="flex justify-between items-center mb-4">
+                      <h3 className="text-xl font-bold text-gray-800">{editingId ? 'Editar Reserva' : 'Nueva Reserva'}</h3>
+                      <button onClick={closeForm}><X size={20} className="text-gray-400 hover:text-gray-600"/></button>
+                  </div>
+                  
+                  <div className="space-y-4">
+                      <div>
+                          <label className="text-xs font-bold text-gray-500 uppercase">Cliente</label>
+                          <input className="w-full p-3 border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-pink-500 outline-none" 
+                              value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Nombre completo"/>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Fecha</label>
+                              <input type="date" className="w-full p-3 border rounded-lg bg-gray-50 focus:bg-white outline-none" 
+                                  value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                          </div>
+                          <div>
+                              <label className="text-xs font-bold text-gray-500 uppercase">Hora</label>
+                              <input type="time" className="w-full p-3 border rounded-lg bg-gray-50 focus:bg-white outline-none" 
+                                  value={formData.time} onChange={e => setFormData({...formData, time: e.target.value})} />
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="text-xs font-bold text-gray-500 uppercase">Personas</label>
+                          <div className="flex items-center gap-4 bg-gray-50 p-2 rounded-lg border">
+                              <Users size={20} className="text-gray-400"/>
+                              <input type="range" min="1" max="20" className="flex-1 accent-pink-600"
+                                  value={formData.people} onChange={e => setFormData({...formData, people: Number(e.target.value)})} />
+                              <span className="font-bold text-lg w-8 text-center">{formData.people}</span>
+                          </div>
+                      </div>
+
+                      <div>
+                          <label className="text-xs font-bold text-gray-500 uppercase">Notas</label>
+                          <textarea className="w-full p-3 border rounded-lg bg-gray-50 focus:bg-white outline-none h-20 resize-none" 
+                              value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} placeholder="Ej: Cumpleaños, silla de bebé..."/>
+                      </div>
+
+                      <button onClick={handleSave} className="w-full py-3 bg-pink-600 hover:bg-pink-700 text-white font-bold rounded-lg transition-colors">
+                          Guardar Reserva
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* LISTA DE RESERVAS */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-4 border-b border-gray-100 bg-gray-50">
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18}/>
+                <input placeholder="Buscar reserva..." className="w-full pl-9 p-2 border rounded-lg outline-none focus:ring-1 focus:ring-pink-500" 
+                    value={searchTerm} onChange={e => setSearchTerm(e.target.value)}/>
+            </div>
+          </div>
+          
+          <table className="w-full text-left">
+              <thead className="bg-gray-50 border-b border-gray-100 text-xs uppercase text-gray-500">
+                  <tr>
+                      <th className="p-4">Cliente</th>
+                      <th className="p-4">Fecha y Hora</th>
+                      <th className="p-4 text-center">Pax</th>
+                      <th className="p-4">Estado</th>
+                      <th className="p-4 text-right">Acciones</th>
+                  </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                  {filteredReservations.map(res => (
+                      <tr key={res.id} className="hover:bg-gray-50 group">
+                          <td className="p-4">
+                              <div className="font-bold text-gray-800">{res.name}</div>
+                              {res.notes && <div className="text-xs text-gray-500 flex items-center gap-1"><MessageSquare size={10}/> {res.notes}</div>}
+                          </td>
+                          <td className="p-4">
+                              <div className="flex flex-col text-sm">
+                                  <span className="font-medium flex items-center gap-1"><Calendar size={12}/> {new Date(res.date).toLocaleDateString()}</span>
+                                  <span className="text-gray-500 flex items-center gap-1"><Clock size={12}/> {res.time} hs</span>
+                              </div>
+                          </td>
+                          <td className="p-4 text-center">
+                              <div className="inline-flex items-center gap-1 bg-gray-100 px-2 py-1 rounded text-sm font-bold text-gray-600">
+                                  <Users size={12}/> {res.people}
+                              </div>
+                          </td>
+                          <td className="p-4">
+                              <span className={`px-2 py-1 rounded text-[10px] font-bold border uppercase ${getStatusColor(res.status)}`}>
+                                  {res.status}
+                              </span>
+                          </td>
+                          <td className="p-4 text-right">
+                              <div className="flex justify-end gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                                  {res.status === 'pendiente' && (
+                                      <button onClick={() => handleStatusChange(res.id, 'confirmada', res.name)} className="p-2 text-green-500 hover:bg-green-50 rounded" title="Confirmar">
+                                          <Check size={18}/>
+                                      </button>
+                                  )}
+                                  {res.status !== 'cancelada' && (
+                                      <button onClick={() => handleStatusChange(res.id, 'cancelada', res.name)} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded" title="Cancelar">
+                                          <X size={18}/>
+                                      </button>
+                                  )}
+                                  
+                                  <div className="w-px h-6 bg-gray-200 mx-1"></div>
+
+                                  <button onClick={() => openForm(res)} className="p-2 text-blue-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Editar">
+                                      <Edit size={18}/>
+                                  </button>
+                                  <button onClick={() => handleDelete(res.id, res.name)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-gray-100 rounded" title="Borrar">
+                                      <Trash size={18}/>
+                                  </button>
+                              </div>
+                          </td>
+                      </tr>
+                  ))}
+              </tbody>
+          </table>
+          
+          {filteredReservations.length === 0 && (
+              <div className="p-10 text-center text-gray-400">
+                  No hay reservas encontradas.
+              </div>
+          )}
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="components/Users.tsx">
+import { useEffect, useState } from 'react';
+import { supabase } from '../services/supabase';
+import { logAction } from '../services/audit'; 
+import { createClient } from '@supabase/supabase-js'; 
+import { Shield, User, X, UserPlus, CheckCircle, AlertCircle, Lock, Trash, Edit, Save } from 'lucide-react';
+
+export default function Users() {
+  const [profiles, setProfiles] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [currentUserRole, setCurrentUserRole] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string>('');
+  
+  // Estado para el Modal (Crear / Editar)
+  const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null); // Si existe, estamos editando
+  const [userData, setUserData] = useState({ email: '', password: '', name: '', role: 'cashier' });
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    setLoading(true);
+    
+    // 1. Obtener quién soy
+    const { data: { user } } = await supabase.auth.getUser();
+    const email = user?.email || '';
+    setCurrentUserEmail(email);
+
+    const isDemo = email.toLowerCase().includes('demo');
+
+    // === MODO SIMULACIÓN (DEMO) ===
+    if (isDemo) {
+        setProfiles([
+            { id: 'demo-user', email: email, role: 'admin', full_name: 'Usuario Demo' }, 
+            { id: 'fake-1', email: 'cajero@pizzaflow.com', role: 'cashier', full_name: 'Cajero Ejemplo' },
+            { id: 'fake-2', email: 'cocina@pizzaflow.com', role: 'cocina', full_name: 'Chef Mario' },
+            { id: 'fake-3', email: 'admin@pizzaflow.com', role: 'admin', full_name: 'Socio Admin' }
+        ]);
+        setCurrentUserRole('admin'); 
+        setLoading(false);
+        return; 
+    }
+
+    // === MODO REAL (ADMIN) ===
+    if (user) {
+        const { data: myProfile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+        setCurrentUserRole(myProfile?.role || 'cashier');
+    }
+
+    // Traemos perfiles. Nota: El nombre real suele estar en raw_user_meta_data de auth.users, 
+    // pero aquí usaremos el email como identificador principal o un campo name si lo agregaste a profiles.
+    // Para simplificar, mostramos Email y Rol.
+    const { data: profilesData } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('email', { ascending: true });
+    
+    if (profilesData) setProfiles(profilesData);
+    setLoading(false);
+  };
+
+  // --- ABRIR MODAL (CREAR O EDITAR) ---
+  const openModal = (userToEdit: any = null) => {
+      if (userToEdit) {
+          // MODO EDITAR
+          setEditingId(userToEdit.id);
+          setUserData({ 
+              email: userToEdit.email, 
+              password: '', // No mostramos la pass actual
+              name: userToEdit.full_name || '', // Si tuvieras columna name
+              role: userToEdit.role 
+          });
+      } else {
+          // MODO CREAR
+          setEditingId(null);
+          setUserData({ email: '', password: '', name: '', role: 'cashier' });
+      }
+      setShowModal(true);
+  };
+
+  // --- GUARDAR (CREAR O EDITAR) ---
+  const handleSaveUser = async () => {
+    // 1. Validaciones
+    if (currentUserEmail.includes('demo')) {
+        // LÓGICA DEMO
+        if (editingId) {
+            setProfiles(profiles.map(p => p.id === editingId ? { ...p, ...userData } : p));
+            logAction('EDITAR_USUARIO', `(Simulado) Editado: ${userData.email}`, 'Usuarios');
+            alert("Usuario editado en MEMORIA (Modo Demo).");
+        } else {
+            setProfiles([...profiles, { id: `fake-${Date.now()}`, ...userData }]);
+            logAction('CREAR_USUARIO', `(Simulado) Nuevo: ${userData.email}`, 'Usuarios');
+            alert("Usuario creado en MEMORIA (Modo Demo).");
+        }
+        setShowModal(false);
+        return;
+    }
+
+    // LÓGICA REAL (ADMIN)
+    if (!userData.email || !userData.role) return alert("Faltan datos obligatorios.");
+    // Si es nuevo, pass obligatoria. Si edita, opcional.
+    if (!editingId && userData.password.length < 6) return alert("Contraseña mínima: 6 caracteres.");
+    
+    setIsProcessing(true);
+
+    try {
+        if (editingId) {
+            // --- EDICIÓN REAL ---
+            
+            // 1. Llamar a la función SQL para actualizar Auth (Email, Pass, Metadata)
+            const { error: rpcError } = await supabase.rpc('update_user_by_admin', {
+                target_user_id: editingId,
+                new_email: userData.email,
+                new_password: userData.password || null, // Si está vacío, no la cambia
+                new_name: userData.name
+            });
+
+            if (rpcError) throw rpcError;
+
+            // 2. Actualizar el ROL en Profiles (si cambió)
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .update({ role: userData.role })
+                .eq('id', editingId);
+
+            if (profileError) throw profileError;
+
+            await logAction('EDITAR_USUARIO', `Usuario editado: ${userData.email}`, 'Usuarios');
+            alert("Usuario actualizado correctamente.");
+
+        } else {
+            // --- CREACIÓN REAL (Usando el truco del cliente temporal) ---
+            
+            // @ts-ignore
+            const tempSupabase = createClient(supabase.supabaseUrl, supabase.supabaseKey);
+            const { data: authData, error: authError } = await tempSupabase.auth.signUp({
+                email: userData.email,
+                password: userData.password,
+                options: { data: { full_name: userData.name } }
+            });
+
+            if (authError) throw authError;
+            if (!authData.user) throw new Error("Error al crear en Auth.");
+
+            // Upsert en Profiles
+            const { error: upsertError } = await supabase
+                .from('profiles')
+                .upsert({ id: authData.user.id, email: userData.email, role: userData.role });
+
+            if (upsertError) throw upsertError;
+
+            await logAction('CREAR_USUARIO', `Nuevo usuario: ${userData.email}`, 'Usuarios');
+            alert("Usuario creado correctamente.");
+        }
+
+        setShowModal(false);
+        fetchData();
+
+    } catch (error: any) {
+        console.error("Error al guardar:", error);
+        alert("Error: " + error.message);
+    } finally {
+        setIsProcessing(false);
+    }
+  };
+
+  // --- ELIMINAR ---
+  const handleDeleteUser = async (userId: string) => {
+     if (currentUserEmail.includes('demo')) {
+         if(confirm("Modo Demo: ¿Simular eliminación?")) {
+             setProfiles(profiles.filter(p => p.id !== userId));
+             logAction('ELIMINAR_USUARIO', `(Simulado) Usuario ${userId}`, 'Usuarios');
+         }
+         return;
+     }
+
+     if (currentUserRole !== 'admin') return alert("Solo administradores pueden eliminar usuarios.");
+     
+     // No borrarte a ti mismo
+     const { data: { user } } = await supabase.auth.getUser();
+     if (user && user.id === userId) return alert("No puedes eliminar tu propio usuario.");
+
+     if (!confirm("¿Estás seguro de ELIMINAR DEFINITIVAMENTE este usuario?")) return;
+
+     // Llamada a RPC para borrado profundo
+     const { error } = await supabase.rpc('delete_user_by_admin', { target_user_id: userId });
+
+     if (error) {
+         // Fallback perfil
+         const { error: profileError } = await supabase.from('profiles').delete().eq('id', userId);
+         if (profileError) alert("Error al eliminar: " + error.message);
+         else alert("Solo se borró el perfil (RPC falló).");
+     } else {
+         await logAction('ELIMINAR_USUARIO', `Usuario ${userId} eliminado`, 'Usuarios');
+         setProfiles(profiles.filter(p => p.id !== userId));
+         alert("Usuario eliminado correctamente.");
+     }
+  };
+
+  // Actualización rápida de rol desde la tabla (sin abrir modal)
+  const handleQuickRoleUpdate = async (userId: string, newRole: string) => {
+    if (currentUserEmail.includes('demo')) return alert("Modo Demo: No puedes cambiar roles.");
+    
+    // Check de seguridad local
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user && user.id === userId && newRole !== 'admin') return alert("No puedes quitarte admin a ti mismo.");
+
+    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
+    if (error) alert("Error: " + error.message);
+    else {
+        await logAction('ROL_MODIFICADO', `Rol cambiado a ${newRole}`, 'Usuarios');
+        setProfiles(profiles.map(p => p.id === userId ? { ...p, role: newRole } : p));
+    }
+  };
+
+  const renderRoleBadge = (role: string) => {
+    const styles: any = {
+        admin: 'bg-purple-100 text-purple-700 border-purple-200',
+        cashier: 'bg-green-100 text-green-700 border-green-200',
+        cocina: 'bg-orange-100 text-orange-700 border-orange-200',
+    };
+    return (
+        <span className={`px-2 py-1 rounded text-[10px] font-bold border uppercase ${styles[role] || 'bg-gray-100 text-gray-600'}`}>
+            {role}
+        </span>
+    );
+  };
+
+  const isDemo = currentUserEmail.includes('demo');
+
+  if (loading) return <div className="p-8 text-center text-gray-500">Cargando usuarios...</div>;
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+          <Shield className="text-purple-600"/> Gestión de Usuarios
+        </h2>
+        
+        {currentUserRole === 'admin' && (
+            <button 
+                onClick={() => openModal()}
+                className={`text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors shadow-sm font-medium ${isDemo ? 'bg-orange-500 hover:bg-orange-600' : 'bg-purple-600 hover:bg-purple-700'}`}
+            >
+                <UserPlus size={18} /> Nuevo Usuario
+            </button>
+        )}
+      </div>
+
+      {isDemo && (
+          <div className="mb-4 bg-orange-50 text-orange-800 p-3 rounded-lg flex items-center gap-2 text-sm border border-orange-200">
+              <Lock size={16} />
+              <span><strong>Modo Demo:</strong> Puedes editar y borrar visualmente, pero no afecta la base de datos.</span>
+          </div>
+      )}
+
+      {/* MODAL UNIVERSAL (CREAR / EDITAR) */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 backdrop-blur-sm p-4 animate-in fade-in">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                <div className={`${isDemo ? 'bg-orange-500' : 'bg-purple-600'} p-4 flex justify-between items-center text-white`}>
+                    <h3 className="font-bold flex items-center gap-2">
+                        {editingId ? <Edit size={20}/> : <UserPlus size={20}/>} 
+                        {editingId ? 'Editar Usuario' : 'Nuevo Usuario'}
+                    </h3>
+                    <button onClick={() => setShowModal(false)} className="hover:bg-white/20 p-1 rounded"><X size={20}/></button>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Nombre</label>
+                        <input type="text" placeholder="Ej: Juan Pérez" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
+                            value={userData.name} onChange={e => setUserData({...userData, name: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
+                        <input type="email" placeholder="usuario@pizzaflow.com" className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
+                            value={userData.email} onChange={e => setUserData({...userData, email: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                            {editingId ? 'Nueva Contraseña (Opcional)' : 'Contraseña'}
+                        </label>
+                        <input type="password" placeholder={editingId ? "Dejar vacía para no cambiar" : "Mínimo 6 caracteres"} 
+                            className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
+                            value={userData.password} onChange={e => setUserData({...userData, password: e.target.value})}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Rol</label>
+                        <select className="w-full p-3 border rounded-lg outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                            value={userData.role} onChange={e => setUserData({...userData, role: e.target.value})}
+                        >
+                            <option value="cashier">Cajero (Ventas)</option>
+                            <option value="cocina">Cocina (Pantalla)</option>
+                            <option value="admin">Administrador (Total)</option>
+                        </select>
+                    </div>
+                    
+                    <button 
+                        onClick={handleSaveUser} 
+                        disabled={isProcessing}
+                        className={`w-full text-white font-bold py-3 rounded-lg mt-2 flex justify-center items-center gap-2 transition-all ${isDemo ? 'bg-orange-500 hover:bg-orange-600' : 'bg-purple-600 hover:bg-purple-700'}`}
+                    >
+                        {isProcessing ? 'Procesando...' : <><Save size={18}/> {editingId ? 'Guardar Cambios' : 'Crear Usuario'}</>}
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+            <table className="w-full text-left">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                    <tr>
+                        <th className="p-4 text-xs font-bold text-gray-500 uppercase">Usuario</th>
+                        <th className="p-4 text-xs font-bold text-gray-500 uppercase">Rol</th>
+                        <th className="p-4 text-xs font-bold text-gray-500 uppercase">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                    {profiles.map((profile) => (
+                        <tr key={profile.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="p-4">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-gray-100 p-2 rounded-full text-gray-500">
+                                        <User size={18} />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-gray-800 text-sm">{profile.full_name || 'Usuario'}</p>
+                                        <p className="text-xs text-gray-500">{profile.email} 
+                                            {profile.email === currentUserEmail && <span className="ml-1 text-blue-600 font-bold">(Tú)</span>}
+                                        </p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td className="p-4">
+                                {renderRoleBadge(profile.role)}
+                            </td>
+                            <td className="p-4 flex items-center gap-2">
+                                {/* Selector Rápido */}
+                                <select 
+                                    className={`bg-white border border-gray-200 text-gray-700 text-xs rounded-lg block p-2 outline-none ${isDemo ? 'opacity-50' : 'cursor-pointer hover:border-purple-300'}`}
+                                    value={profile.role}
+                                    onChangeCapture={(e: any) => handleQuickRoleUpdate(profile.id, e.target.value)}
+                                    disabled={currentUserRole !== 'admin'}
+                                >
+                                    <option value="admin">Admin</option>
+                                    <option value="cashier">Cajero</option>
+                                    <option value="cocina">Cocina</option>
+                                </select>
+
+                                {/* BOTONES ACCIÓN (Solo Admin y No uno mismo) */}
+                                {currentUserRole === 'admin' && profile.email !== currentUserEmail && (
+                                    <>
+                                        <button 
+                                            onClick={() => openModal(profile)}
+                                            className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                                            title="Editar datos"
+                                        >
+                                            <Edit size={18} />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDeleteUser(profile.id)}
+                                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                            title="Eliminar usuario"
+                                        >
+                                            <Trash size={18} />
+                                        </button>
+                                    </>
+                                )}
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+</file>
+
+<file path="context/AppContext.tsx">
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { User, Product, Order, AuditLog, UserRole, OrderStatus, Customer, Promotion } from '../types';
+
+// Initial Data
+const INITIAL_ADMIN: User = {
+  id: 'admin-1',
+  username: 'admin',
+  password: '123',
+  role: UserRole.ADMIN,
+  name: 'Administrador'
+};
+
+// Prices updated to Argentine Pesos (approximate)
+const INITIAL_PRODUCTS: Product[] = [
+  { id: 'p1', name: 'Pizza Muzza', description: 'Salsa de tomate, mucha mozzarella y orégano.', price: 12500, category: 'pizza', active: true },
+  { id: 'p2', name: 'Pizza Calabresa', description: 'Mozzarella y rodajas de longaniza calabresa.', price: 14800, category: 'pizza', active: true },
+  { id: 'p3', name: 'Coca Cola 1.5L', description: 'Refresco de cola botella grande.', price: 3500, category: 'drink', active: true },
+  { id: 'p4', name: 'Empanada Carne', description: 'Empanada clásica de carne cortada a cuchillo.', price: 1200, category: 'side', active: true },
+];
+
+interface AppContextType {
+  currentUser: User | null;
+  users: User[];
+  products: Product[];
+  orders: Order[];
+  customers: Customer[];
+  promotions: Promotion[];
+  logs: AuditLog[];
+  login: (u: string, p: string) => boolean;
+  logout: () => void;
+  addProduct: (p: Product) => void;
+  updateProduct: (p: Product) => void;
+  deleteProduct: (id: string) => void;
+  addOrder: (o: Order) => void;
+  updateOrderStatus: (id: string, status: OrderStatus) => void;
+  addUser: (u: User) => void;
+  updateUser: (u: User) => void;
+  deleteUser: (id: string) => void;
+  addCustomer: (c: Customer) => void;
+  updateCustomer: (c: Customer) => void;
+  addPromotion: (p: Promotion) => void;
+  deletePromotion: (id: string) => void;
+  togglePromotion: (id: string) => void;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // Load from LocalStorage or use defaults
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const saved = localStorage.getItem('currentUser');
+    return saved ? JSON.parse(saved) : null;
+  });
+
+  const [users, setUsers] = useState<User[]>(() => {
+    const saved = localStorage.getItem('users');
+    return saved ? JSON.parse(saved) : [INITIAL_ADMIN];
+  });
+
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = localStorage.getItem('products');
+    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+  });
+
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const saved = localStorage.getItem('orders');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem('customers');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [promotions, setPromotions] = useState<Promotion[]>(() => {
+    const saved = localStorage.getItem('promotions');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  const [logs, setLogs] = useState<AuditLog[]>(() => {
+    const saved = localStorage.getItem('logs');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Persistence Effects
+  useEffect(() => localStorage.setItem('users', JSON.stringify(users)), [users]);
+  useEffect(() => localStorage.setItem('products', JSON.stringify(products)), [products]);
+  useEffect(() => localStorage.setItem('orders', JSON.stringify(orders)), [orders]);
+  useEffect(() => localStorage.setItem('customers', JSON.stringify(customers)), [customers]);
+  useEffect(() => localStorage.setItem('promotions', JSON.stringify(promotions)), [promotions]);
+  useEffect(() => localStorage.setItem('logs', JSON.stringify(logs)), [logs]);
+  useEffect(() => {
+    if (currentUser) localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    else localStorage.removeItem('currentUser');
+  }, [currentUser]);
+
+  // Logging Helper
+  const addLog = (action: string, details: string) => {
+    if (!currentUser) return;
+    const newLog: AuditLog = {
+      id: Date.now().toString(),
+      action,
+      details,
+      userId: currentUser.id,
+      userName: currentUser.name,
+      timestamp: Date.now()
+    };
+    setLogs(prev => [newLog, ...prev]);
+  };
+
+  // Actions
+  const login = (u: string, p: string) => {
+    const found = users.find(user => user.username === u && user.password === p);
+    if (found) {
+      setCurrentUser(found);
+      const loginLog: AuditLog = {
+        id: Date.now().toString(),
+        action: 'LOGIN',
+        details: 'Usuario ingresó al sistema',
+        userId: found.id,
+        userName: found.name,
+        timestamp: Date.now()
+      };
+      setLogs(prev => [loginLog, ...prev]);
+      return true;
+    }
+    return false;
+  };
+
+  const logout = () => {
+    addLog('LOGOUT', 'Usuario salió del sistema');
+    setCurrentUser(null);
+  };
+
+  const addProduct = (p: Product) => {
+    setProducts(prev => [...prev, p]);
+    addLog('PRODUCT_ADD', `Agregó producto: ${p.name}`);
+  };
+
+  const updateProduct = (p: Product) => {
+    setProducts(prev => prev.map(prod => prod.id === p.id ? p : prod));
+    addLog('PRODUCT_UPDATE', `Actualizó producto: ${p.name}`);
+  };
+
+  const deleteProduct = (id: string) => {
+    const prod = products.find(p => p.id === id);
+    setProducts(prev => prev.filter(p => p.id !== id));
+    addLog('PRODUCT_DELETE', `Eliminó producto: ${prod?.name || id}`);
+  };
+
+  const addOrder = (o: Order) => {
+    setOrders(prev => [o, ...prev]);
+    addLog('ORDER_CREATE', `Nueva orden #${o.id.slice(-4)} por $${o.total}`);
+  };
+
+  const updateOrderStatus = (id: string, status: OrderStatus) => {
+    setOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+    addLog('ORDER_UPDATE', `Orden #${id.slice(-4)} estado: ${status}`);
+  };
+
+  const addUser = (u: User) => {
+    setUsers(prev => [...prev, u]);
+    addLog('USER_ADD', `Creó usuario: ${u.username}`);
+  };
+
+  const updateUser = (u: User) => {
+    setUsers(prev => prev.map(user => user.id === u.id ? u : user));
+    addLog('USER_UPDATE', `Actualizó usuario: ${u.username}`);
+  };
+
+  const deleteUser = (id: string) => {
+    const user = users.find(u => u.id === id);
+    setUsers(prev => prev.filter(u => u.id !== id));
+    addLog('USER_DELETE', `Eliminó usuario: ${user?.username}`);
+  };
+
+  const addCustomer = (c: Customer) => {
+    setCustomers(prev => [...prev, c]);
+    addLog('CUSTOMER_ADD', `Registró cliente: ${c.firstName} ${c.lastName}`);
+  };
+
+  const updateCustomer = (c: Customer) => {
+    setCustomers(prev => prev.map(cust => cust.id === c.id ? c : cust));
+    addLog('CUSTOMER_UPDATE', `Actualizó cliente: ${c.firstName}`);
+  };
+
+  const addPromotion = (p: Promotion) => {
+    setPromotions(prev => [...prev, p]);
+    addLog('PROMO_ADD', `Creó promoción: ${p.name}`);
+  };
+
+  const deletePromotion = (id: string) => {
+    setPromotions(prev => prev.filter(p => p.id !== id));
+    addLog('PROMO_DELETE', `Eliminó promoción ID: ${id}`);
+  };
+
+  const togglePromotion = (id: string) => {
+    setPromotions(prev => prev.map(p => p.id === id ? { ...p, active: !p.active } : p));
+  };
+
+  return (
+    <AppContext.Provider value={{
+      currentUser, users, products, orders, customers, promotions, logs,
+      login, logout,
+      addProduct, updateProduct, deleteProduct,
+      addOrder, updateOrderStatus,
+      addUser, updateUser, deleteUser,
+      addCustomer, updateCustomer,
+      addPromotion, deletePromotion, togglePromotion
+    }}>
+      {children}
+    </AppContext.Provider>
+  );
+};
+
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) throw new Error("useApp must be used within AppProvider");
+  return context;
+};
+</file>
+
+<file path="index.css">
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+</file>
+
+<file path="index.html">
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>PizzaFlow Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="manifest" href="/manifest.json">
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #f8fafc;
+      }
+      /* Custom Scrollbar for better aesthetics */
+      ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #f1f1f1; 
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #cbd5e1; 
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94a3b8; 
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
+</file>
+
+<file path="index.tsx">
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+const rootElement = document.getElementById('root');
+if (!rootElement) {
+  throw new Error("Could not find root element to mount to");
+}
+
+const root = ReactDOM.createRoot(rootElement);
+root.render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+</file>
+
+<file path="main.js">
+const { app, BrowserWindow } = require('electron');
+const path = require('path');
+
+function createWindow() {
+  const win = new BrowserWindow({
+    width: 1024,
+    height: 768,
+    icon: path.join(__dirname, 'icon.ico'), // Si tienes un icono
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false // Simplificación para empezar
+    }
+  });
+
+  // Aquí hay un truco:
+  // En desarrollo (mientras pruebas) cargamos la URL local.
+  // En producción (el .exe final) cargamos el archivo index.html compilado.
+  // Como eres Junior, vamos directo a la versión compilada para el EXE:
+  win.loadFile(path.join(__dirname, 'dist', 'index.html'));
+  
+  // Quita la barra de menú fea de arriba si quieres
+  win.setMenuBarVisibility(false);
+}
+
+app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit();
+});
+</file>
+
+<file path="manifest.json">
+{
+  "short_name": "PizzaFlow",
+  "name": "PizzaFlow Manager",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3595/3595458.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3595/3595458.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#ea580c",
+  "background_color": "#ffffff"
+}
+</file>
+
+<file path="metadata.json">
+{
+  "name": "PizzaFlow Manager",
+  "description": "A comprehensive Pizzeria Management System featuring POS, Kitchen Display System, Inventory Management with AI-assisted descriptions, User Control, and Audit Logging."
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "pizzaflow-manager",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/genai": "^1.34.0",
+    "@supabase/supabase-js": "^2.89.0",
+    "lucide-react": "^0.562.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "react-router-dom": "^7.11.0",
+    "recharts": "^3.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "autoprefixer": "^10.4.23",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.19",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
+</file>
+
+<file path="postcss.config.js">
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+</file>
+
+<file path="public/_redirects">
+/* /index.html 200
+</file>
+
+<file path="README.md">
+# 🍕 PizzaFlow - Sistema de Gestión para Pizzerías (POS + KDS)
+
+## 📋 Descripción
+Sistema integral para la gestión gastronómica desarrollado con tecnologías modernas. Permite tomar pedidos en tiempo real, gestionar la comanda en cocina, administrar usuarios con roles (Admin, Cajero, Cocinero) y visualizar métricas de ventas.
+
+## 🚀 Tecnologías Utilizadas
+* **Frontend:** React + TypeScript + Vite
+* **Estilos:** Tailwind CSS (Diseño Responsive & Mobile First)
+* **Backend / Base de Datos:** Supabase (PostgreSQL)
+* **Autenticación:** Supabase Auth
+* **Despliegue:** Vercel
+
+## ✨ Funcionalidades Principales
+* 🛒 **Punto de Venta (POS):** Carrito dinámico, buscador de clientes y cálculo automático de promociones.
+* 👨‍🍳 **Kitchen Display System (KDS):** Pantalla de cocina en tiempo real que se actualiza automáticamente al entrar un pedido.
+* 📱 **Modo Móvil:** Interfaz optimizada para celulares (camareros) con navegación tipo App nativa.
+* 🔐 **Roles y Permisos:** Sistema de seguridad donde los cajeros no pueden ver métricas de administración.
+* 📊 **Dashboard:** Métricas de ventas y gestión de inventario.
+
+## 🔗 Demo en Vivo
+Puedes probar la aplicación aquí:(https://pizzaflow-nu.vercel.app/)
+
+---
+Desarrollado por Martin Diaz
+</file>
+
+<file path="services/audit.ts">
+import { supabase } from './supabase';
+
+/**
+ * Registra una acción en el historial.
+ * @param action Tipo de acción (ej: 'LOGIN', 'CREAR_CLIENTE', 'VENTA')
+ * @param details Descripción humana de lo que pasó
+ * @param module Módulo donde ocurrió (ej: 'Clientes', 'Caja')
+ */
+export const logAction = async (action: string, details: string, module: string) => {
+    try {
+        // 1. Obtener usuario actual
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        if (!user || !user.email) return;
+
+        // 2. FILTRO DEMO: Si es demo, NO guardamos nada en la base de datos real.
+        // Simplemente retornamos (o hacemos un console.log para debug)
+        if (user.email.toLowerCase().includes('demo')) {
+            console.log(`[AUDIT SIMULADO] ${action}: ${details}`);
+            return;
+        }
+
+        // 3. GUARDAR EN BASE DE DATOS REAL
+        const { error } = await supabase.from('audit_logs').insert([{
+            user_id: user.id,
+            user_email: user.email,
+            action: action,
+            details: details,
+            module: module
+        }]);
+
+        if (error) console.error("Error guardando log:", error);
+
+    } catch (e) {
+        console.error("Error en servicio de auditoría:", e);
+    }
+};
+</file>
+
+<file path="services/geminiService.ts">
+import { GoogleGenAI } from "@google/genai";
+
+// Initialize Gemini Client
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+
+export const generateProductDescription = async (name: string, category: string): Promise<string> => {
+  if (!process.env.API_KEY) {
+    return "Descripción no disponible (API Key faltante).";
+  }
+
+  try {
+    const prompt = `Escribe una descripción corta, apetitosa y atractiva para un menú de restaurante. 
+    Producto: ${name}
+    Categoría: ${category}
+    Idioma: Español
+    Máximo 20 palabras.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+    });
+
+    return response.text?.trim() || "Deliciosa opción de la casa.";
+  } catch (error) {
+    console.error("Error generating description:", error);
+    return "Una excelente elección para tu paladar.";
+  }
+};
+</file>
+
+<file path="services/supabase.ts">
+/// <reference types="vite/client" />
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error("Faltan las variables de entorno de Supabase");
+}
+
+export const supabase = createClient(supabaseUrl, supabaseKey);
+</file>
+
+<file path="tailwind.config.js">
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./context/**/*.{js,ts,jsx,tsx}",
+    "./*.{js,ts,jsx,tsx}"
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+</file>
+
+<file path="tsconfig.json">
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "module": "ESNext",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "allowJs": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    },
+    "allowImportingTsExtensions": true,
+    "noEmit": true
+  }
+}
+</file>
+
+<file path="types.ts">
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  STAFF = 'STAFF'
+}
+
+export interface User {
+  id: string;
+  username: string;
+  password: string; // In a real app, this would be hashed
+  role: UserRole;
+  name: string;
+}
+
+export interface Product {
+  id: string;
+  name: string;
+  description: string;
+  price: number;
+  category: 'pizza' | 'drink' | 'side' | 'dessert';
+  image?: string;
+  active: boolean;
+}
+
+export interface Customer {
+  id: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  address: string;
+  createdAt: number;
+}
+
+export interface Promotion {
+  id: string;
+  name: string;
+  type: 'SIMPLE' | 'COMBO'; // SIMPLE = Discount on 1 product, COMBO = Buy A + B get discount
+  targetProductIds: string[]; // For SIMPLE: [prodId], For COMBO: [prodId1, prodId2]
+  discountType: 'PERCENTAGE' | 'FIXED';
+  discountValue: number;
+  active: boolean;
+}
+
+export interface OrderItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  price: number;
+  notes?: string;
+}
+
+export enum OrderStatus {
+  PENDING = 'PENDING',
+  PREPARING = 'PREPARING',
+  READY = 'READY',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED'
+}
+
+export interface Order {
+  id: string;
+  items: OrderItem[];
+  subtotal: number;
+  discount: number;
+  total: number;
+  status: OrderStatus;
+  createdBy: string; // User ID
+  createdByName: string;
+  createdAt: number; // Timestamp
+  customerId?: string;
+  customerName?: string;
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  details: string;
+  userId: string;
+  userName: string;
+  timestamp: number;
+}
+
+export type ViewState = 'POS' | 'KITCHEN' | 'INVENTORY' | 'CUSTOMERS' | 'PROMOTIONS' | 'HISTORY' | 'USERS' | 'LOGIN';
+</file>
+
+<file path="vite.config.ts">
+import path from 'path';
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig(({ mode }) => {
+    const env = loadEnv(mode, '.', '');
+    return {
+      server: {
+        port: 3000,
+        host: '0.0.0.0',
+      },
+      plugins: [react()],
+      define: {
+        'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+        'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)
+      },
+      resolve: {
+        alias: {
+          '@': path.resolve(__dirname, '.'),
+        }
+      }
+    };
+});
+</file>
+
+</files>
