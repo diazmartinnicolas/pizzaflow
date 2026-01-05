@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { supabase } from './services/supabase'; 
 import { logAction } from './services/audit'; 
 import { Login } from './components/Login';
@@ -16,7 +16,7 @@ import {
   History as HistoryIcon, UserCog, LogOut, MinusCircle, 
   UserPlus, Key, X, Search, CalendarClock, Menu, Receipt,
   LayoutDashboard, Monitor, Crown, BarChart3, Briefcase, Tag,
-  Building2, Flame 
+  Building2, Flame, Minus, Plus, Trash2 
 } from 'lucide-react';
 
 // --- CONSTANTES DEMO ---
@@ -59,14 +59,15 @@ function App() {
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [showMobileMenu, setShowMobileMenu] = useState(false); 
+  
+  // Ref para cerrar dropdown al hacer click afuera
+  const searchContainerRef = useRef<HTMLDivElement>(null);
 
   // Lógica de Permisos
   const currentUserEmail = session?.user?.email?.toLowerCase().trim() || '';
   const isDemo = currentUserEmail.includes('demo');
-  
-  // --- CORRECCIÓN 1: DECLARACIÓN DE VARIABLES FALTANTES ---
   const isSuperAdmin = userRole === 'super_admin';
-  const isAdmin = userRole === 'admin' || isSuperAdmin || isDemo;
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin' || isDemo;
 
   const categories = ['Todo', 'Promociones', 'Pizzas', 'Milanesas', 'Hamburguesas', 'Empanadas', 'Bebidas', 'Postres'];
 
@@ -74,6 +75,35 @@ function App() {
   // 1. EFECTOS Y CARGA DE DATOS
   // ==============================================================================
 
+  // Hook para detectar click afuera del buscador
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setShowClientDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [searchContainerRef]);
+
+  // ==============================================================================
+  // SEGURIDAD: RESETEO AUTOMÁTICO AL CAMBIAR DE USUARIO
+  // ==============================================================================
+  useEffect(() => {
+    setCart([]);
+    setCustomers([]);
+    setSelectedCustomerId('');
+    setClientSearchTerm('');
+    setMobileView('products');
+    setDemoOrders([]);
+    setIsProcessing(false);
+    
+    console.log("♻️ Sesión cambiada: Estado limpiado por seguridad.");
+  }, [session?.user?.id]);
+
+  // GESTIÓN DE SESIÓN Y SEGURIDAD
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -86,13 +116,18 @@ function App() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
+      
       if (event === 'SIGNED_IN' && session) {
           setLoading(true);
+          setCart([]); 
           logAction('LOGIN', 'Inicio de sesión exitoso', 'Sistema');
           fetchUserRole(session);
       } else if (event === 'SIGNED_OUT' || !session) {
           setUserRole(null); 
           setCompanyName('');
+          setCart([]); 
+          setCustomers([]); 
+          setSelectedCustomerId('');
           setLoading(false);
       }
     });
@@ -104,7 +139,6 @@ function App() {
     const userId = currentSession.user.id;
     const email = currentSession.user.email;
 
-    // 0. --- REGLA DE ORO: SUPER ADMIN (CEO HARD CHECK) ---
     if (email === 'diazmartinnicolas@gmail.com') {
          console.log("👑 Super Admin (CEO) detectado por email.");
          setUserRole('super_admin');
@@ -114,18 +148,15 @@ function App() {
          return; 
     }
 
-    // 1. Bypass Demo
     if (email?.toLowerCase().includes('demo')) {
         setUserRole('admin');
         setCompanyName('Modo Demo');
-        // Usamos el flag forceDemo=true
         await fetchData(true); 
         setLoading(false);
         return;
     }
 
     try {
-        // 2. CHECK PRIORITARIO: Metadata Super Admin
         const metaRole = currentSession.user.user_metadata?.role || currentSession.user.app_metadata?.role;
         
         if (metaRole === 'super_admin') {
@@ -137,7 +168,6 @@ function App() {
             return; 
         }
 
-        // 3. Consulta a Base de Datos (Para usuarios normales)
         const { data, error } = await supabase
             .from('profiles')
             .select(`
@@ -151,7 +181,6 @@ function App() {
             .eq('id', userId)
             .maybeSingle(); 
         
-        // CHECK: Usuario Huérfano
         if (!data) {
             console.error("⛔ SEGURIDAD: Usuario sin perfil detectado.");
             alert("⛔ ACCESO DENEGADO\n\nTu usuario ha sido eliminado del sistema.");
@@ -163,7 +192,6 @@ function App() {
 
         const company: any = data.companies; 
         
-        // CHECK: Empresa Inactiva
         if (company && company.status === 'inactive') {
             console.warn(`⛔ SEGURIDAD: Empresa ${company.name} inactiva.`);
             alert(`⚠️ CUENTA SUSPENDIDA\n\nLa suscripción de "${company.name}" se encuentra inactiva.`);
@@ -173,7 +201,6 @@ function App() {
             return;
         }
 
-        // ÉXITO
         console.log("✅ Acceso concedido. Rol:", data.role);
         setUserRole(data.role);
         
@@ -194,9 +221,7 @@ function App() {
     setLoading(false);
   };
 
-  // --- CORRECCIÓN 2: FUNCIÓN DE CARGA CON ARGUMENTO OPCIONAL ---
   const fetchData = async (forceDemo = false) => {
-    // MODO DEMO
     if (isDemo || forceDemo) {
         console.log("Modo Demo: Cargando datos locales...");
         setProducts(DEMO_PRODUCTS);
@@ -221,7 +246,7 @@ function App() {
   };
 
   // ==============================================================================
-  // 2. HELPERS
+  // 2. HELPERS Y CÁLCULOS
   // ==============================================================================
 
   const getRoleLabel = () => {
@@ -247,6 +272,19 @@ function App() {
 
   const removeFromCart = (cartId: number) => setCart(cart.filter(item => item.cartId !== cartId));
 
+  const decreaseQuantity = (productId: string) => {
+    const itemIndex = cart.findIndex(item => item.id === productId);
+    if (itemIndex !== -1) {
+        const newCart = [...cart];
+        newCart.splice(itemIndex, 1);
+        setCart(newCart);
+    }
+  };
+
+  const removeGroupFromCart = (productId: string) => {
+    setCart(cart.filter(item => item.id !== productId));
+  };
+
   const handleAddPromotionToCart = (promo: any) => {
       const product1 = products.find(p => p.id === promo.product_1_id);
       if (product1) addToCart(product1);
@@ -254,7 +292,9 @@ function App() {
           const product2 = products.find(p => p.id === promo.product_2_id);
           if (product2) setTimeout(() => addToCart(product2), 50); 
       } else {
-          if (promo.name.toLowerCase().includes('2x1')) setTimeout(() => addToCart(product1), 50);
+          if (promo.name.toLowerCase().includes('2x1') || promo.type === '2x1') {
+             addToCart(product1); 
+          }
       }
   };
 
@@ -264,23 +304,45 @@ function App() {
     let subtotal = cart.reduce((sum, item) => sum + item.price, 0);
 
     promotions.forEach(promo => {
-      while (true) {
+      let guard = 0;
+      while (guard < 100) {
+        guard++;
+
         const index1 = tempCart.findIndex(item => item.id === promo.product_1_id);
-        const index2 = promo.product_2_id ? tempCart.findIndex((item, idx) => item.id === promo.product_2_id && idx !== index1) : -1;
-        
+        if (index1 === -1) break;
+
         if (promo.product_2_id) {
-          if (index1 !== -1 && index2 !== -1) {
+          const index2 = tempCart.findIndex((item, idx) => item.id === promo.product_2_id && idx !== index1);
+          
+          if (index2 !== -1) {
             const amount = (tempCart[index1].price + tempCart[index2].price) * (promo.discount_percentage / 100);
             appliedDiscounts.push({ name: promo.name, amount });
-            const ids = [tempCart[index1].cartId, tempCart[index2].cartId];
-            tempCart = tempCart.filter(item => !ids.includes(item.cartId));
-          } else break;
-        } else {
-          if (index1 !== -1) {
-            appliedDiscounts.push({ name: promo.name, amount: tempCart[index1].price * (promo.discount_percentage / 100) });
-            const idToRemove = tempCart[index1].cartId;
-            tempCart = tempCart.filter(item => item.cartId !== idToRemove);
-          } else break;
+            const idsToRemove = [tempCart[index1].cartId, tempCart[index2].cartId];
+            tempCart = tempCart.filter(item => !idsToRemove.includes(item.cartId));
+          } else {
+            break;
+          }
+        } 
+        else {
+          const is2x1 = promo.type === '2x1' || promo.name.toLowerCase().includes('2x1');
+
+          if (is2x1) {
+             const index2 = tempCart.findIndex((item, idx) => item.id === promo.product_1_id && idx !== index1);
+             if (index2 !== -1) {
+                const totalPrice = tempCart[index1].price + tempCart[index2].price;
+                const amount = totalPrice * (promo.discount_percentage / 100);
+                appliedDiscounts.push({ name: promo.name, amount });
+                const idsToRemove = [tempCart[index1].cartId, tempCart[index2].cartId];
+                tempCart = tempCart.filter(item => !idsToRemove.includes(item.cartId));
+             } else {
+                break;
+             }
+          } else {
+             const amount = tempCart[index1].price * (promo.discount_percentage / 100);
+             appliedDiscounts.push({ name: promo.name, amount });
+             const idToRemove = tempCart[index1].cartId;
+             tempCart = tempCart.filter(item => item.cartId !== idToRemove);
+          }
         }
       }
     });
@@ -291,6 +353,15 @@ function App() {
   const { finalTotal, appliedDiscounts } = calculateTotals();
   const filteredProducts = selectedCategory === 'Todo' ? products : products.filter(p => p.category === selectedCategory);
   const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(clientSearchTerm.toLowerCase()));
+
+  const groupedCart = Object.values(cart.reduce((acc: any, item: any) => {
+    if (!acc[item.id]) {
+      acc[item.id] = { ...item, quantity: 0, subtotalPrice: 0 };
+    }
+    acc[item.id].quantity += 1;
+    acc[item.id].subtotalPrice += item.price;
+    return acc;
+  }, {}));
 
   // ==============================================================================
   // 3. HANDLERS
@@ -401,7 +472,11 @@ function App() {
           <button onClick={handleLogout} className="text-red-300"><LogOut size={20}/></button>
         </div>
         <div className="flex-1 overflow-hidden">
-            <Kitchen demoOrders={demoOrders} onDemoComplete={(id: any) => setDemoOrders(prev => prev.filter(o => o.id !== id))} />
+            <Kitchen 
+                demoOrders={demoOrders} 
+                onDemoComplete={(id: any) => setDemoOrders(prev => prev.filter(o => o.id !== id))} 
+                companyName={companyName} // <--- SE PASA LA PROP AQUÍ
+            />
         </div>
       </div>
     );
@@ -524,7 +599,6 @@ function App() {
       {/* CONTENIDO PRINCIPAL */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-gray-50 relative pt-16 md:pt-0">
         
-        {/* VISTAS */}
         {activeTab === 'pos' && (
           <div className="flex h-full flex-col md:flex-row"> 
             <div className={`flex-1 overflow-y-auto p-4 md:p-6 ${mobileView === 'cart' ? 'hidden md:block' : 'block'}`}>
@@ -569,7 +643,7 @@ function App() {
               <div className="p-4 border-b border-gray-100 bg-gray-50 relative">
                 <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">Cliente</label>
                 <div className="flex gap-2">
-                  <div className="relative w-full">
+                  <div className="relative w-full" ref={searchContainerRef}>
                     <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"><Search size={16} /></div>
                     <input type="text" placeholder="Buscar..." className="w-full pl-9 p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-orange-500 bg-white text-sm" value={clientSearchTerm} onChange={(e) => { setClientSearchTerm(e.target.value); setShowClientDropdown(true); if(e.target.value === '') setSelectedCustomerId(''); }} onFocus={() => setShowClientDropdown(true)} />
                     {showClientDropdown && filteredCustomers.length > 0 && (
@@ -587,10 +661,21 @@ function App() {
               </div>
               <div className="flex-1 overflow-y-auto p-4 space-y-2 pb-24 md:pb-4">
                 {cart.length === 0 && <div className="flex flex-col items-center justify-center h-40 text-gray-400 text-center"><ShoppingCart size={40} className="mb-2 opacity-20"/><p className="text-sm">Carrito vacío</p></div>}
-                {cart.map((item) => (
-                  <div key={item.cartId} className="flex justify-between items-center bg-white border border-gray-100 p-3 rounded-lg shadow-sm group hover:border-orange-200 transition-colors">
-                    <div><p className="font-medium text-sm text-gray-800">{item.name}</p><p className="text-gray-500 text-xs">$ {item.price}</p></div>
-                    <button onClick={() => removeFromCart(item.cartId)} className="text-gray-300 hover:text-red-500 p-2 transition-colors"><MinusCircle size={18}/></button>
+                {groupedCart.map((item: any) => (
+                  <div key={item.id} className="bg-white border border-gray-100 p-3 rounded-lg shadow-sm group hover:border-orange-200 transition-colors">
+                    <div className="flex justify-between items-start mb-2">
+                      <p className="font-medium text-sm text-gray-800 leading-tight">{item.name}</p>
+                      <p className="font-bold text-gray-700 text-sm whitespace-nowrap ml-2">$ {item.subtotalPrice.toLocaleString('es-AR')}</p>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                       <div className="flex items-center gap-3">
+                         <button onClick={() => decreaseQuantity(item.id)} className="w-7 h-7 flex items-center justify-center bg-gray-100 text-gray-600 rounded hover:bg-gray-200 transition-colors"><Minus size={14} /></button>
+                         <span className="text-sm font-bold w-6 text-center">{item.quantity}</span>
+                         <button onClick={() => addToCart(item)} className="w-7 h-7 flex items-center justify-center bg-orange-100 text-orange-600 rounded hover:bg-orange-200 transition-colors"><Plus size={14} /></button>
+                       </div>
+                       <button onClick={() => removeGroupFromCart(item.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors" title="Eliminar producto"><Trash2 size={16} /></button>
+                    </div>
                   </div>
                 ))}
                 {appliedDiscounts.length > 0 && <div className="mt-4 pt-4 border-t border-dashed"><p className="text-xs font-bold uppercase text-gray-500 mb-2">Descuentos Aplicados</p>{appliedDiscounts.map((d, i) => <div key={i} className="flex justify-between text-green-600 text-sm bg-green-50 p-2 rounded mb-1"><span>{d.name}</span><span>- ${d.amount}</span></div>)}</div>}
@@ -605,14 +690,19 @@ function App() {
 
         {/* CONTENIDORES DE OTRAS SECCIONES */}
         <div className="flex-1 overflow-auto bg-gray-50">
-            {activeTab === 'kitchen' && <Kitchen demoOrders={demoOrders} onDemoComplete={(id: any) => setDemoOrders(prev => prev.filter(o => o.id !== id))} />}
+            {activeTab === 'kitchen' && (
+                <Kitchen 
+                    demoOrders={demoOrders} 
+                    onDemoComplete={(id: any) => setDemoOrders(prev => prev.filter(o => o.id !== id))} 
+                    companyName={companyName} // <--- SE PASA LA PROP AQUÍ TAMBIÉN
+                />
+            )}
             {activeTab === 'customers' && <Customers />}
             {isAdmin && activeTab === 'reservations' && <Reservations />}
             {isAdmin && activeTab === 'inventory' && <Inventory />}
             {isAdmin && activeTab === 'promos' && <Promotions />}
             {isAdmin && activeTab === 'history' && <History />}
             
-            {/* LÓGICA DE VISTAS UNIFICADA */}
             {isSuperAdmin && activeTab === 'clients' && <Users />}
             {isAdmin && !isSuperAdmin && activeTab === 'users' && <Users />}
             
