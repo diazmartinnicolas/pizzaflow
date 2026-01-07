@@ -510,7 +510,12 @@ function App() {
 
 
 
-        const { data: promoData } = await supabase.from('promotions').select('*');
+        // En App.tsx, dentro de fetchData:
+
+        const { data: promoData } = await supabase
+            .from('promotions')
+            .select('*')
+            .is('deleted_at', null); // <--- ESTO ES LO QUE FALTA
 
         if (promoData) setPromotions(promoData);
 
