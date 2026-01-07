@@ -77,7 +77,6 @@ export default function Users() {
     }
 
     // 2. HARD CHECK: SUPER ADMIN (SaaS Manager)
-    // Igual que en App.tsx, prioridad absoluta
     if (email === 'diazmartinnicolas@gmail.com' || user.user_metadata?.role === 'super_admin') {
         console.log("Modo: Super Admin (Companies)");
         setViewMode('companies');
@@ -111,7 +110,7 @@ export default function Users() {
       const { data: coData, error: coError } = await supabase
         .from('companies')
         .select('*')
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false }); // RLS debe filtrar deleted_at IS NULL
 
       if (coError) throw coError;
 
@@ -140,7 +139,7 @@ export default function Users() {
             .select('*')
             .eq('company_id', companyId)
             .neq('role', 'super_admin') 
-            .order('name', { ascending: true });
+            .order('name', { ascending: true }); // RLS debe filtrar deleted_at IS NULL
 
           if (error) throw error;
           if (data) setItems(data.map(s => ({
@@ -276,9 +275,9 @@ export default function Users() {
       }
   };
 
-  // --- BORRAR ---
+  // --- BORRAR (SOFT DELETE IMPLEMENTADO) ---
   const handleDelete = async (id: string, name: string) => {
-      if (!confirm(`¿Borrar "${name}"? Esta acción es irreversible.`)) return;
+      if (!confirm(`¿Eliminar "${name}"? Esta acción no se puede deshacer.`)) return;
       
       if (items === DEMO_STAFF) {
           setItems(prev => prev.filter(i => i.id !== id));
@@ -287,14 +286,25 @@ export default function Users() {
 
       try {
           if (viewMode === 'companies') {
-              const { error } = await supabase.from('companies').delete().eq('id', id);
+              // SOFT DELETE EMPRESAS
+              const { error } = await supabase
+                .from('companies')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', id);
+
               if (error) throw error;
               await fetchCompanies();
           } else {
-              const { error } = await supabase.rpc('delete_user_by_admin', { target_user_id: id });
-              if (error) {
-                  await supabase.from('profiles').delete().eq('id', id);
-              }
+              // SOFT DELETE STAFF
+              // Eliminada la llamada a rpc('delete_user_by_admin') para preservar el usuario Auth
+              // Solo marcamos el perfil como borrado
+              const { error } = await supabase
+                .from('profiles')
+                .update({ deleted_at: new Date().toISOString() })
+                .eq('id', id);
+
+              if (error) throw error;
+              
               if (currentUserProfile) await fetchRealStaff(currentUserProfile.company_id);
           }
       } catch (error: any) {

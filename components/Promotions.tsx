@@ -37,7 +37,8 @@ export default function Promotions() {
     const { data: { user } } = await supabase.auth.getUser();
     const email = user?.email || '';
     
-    // Cargar productos para el select
+    // Cargar productos para el select (Solo activos y no borrados)
+    // Nota: El RLS se encarga de filtrar deleted_at IS NULL, pero el filtro active es útil
     const { data: prodData } = await supabase.from('products').select('*').eq('active', true);
     if (prodData) setProducts(prodData);
 
@@ -54,6 +55,7 @@ export default function Promotions() {
     }
 
     // MODO REAL
+    // Gracias a las políticas RLS implementadas, select('*') ya excluye los que tienen deleted_at
     const { data } = await supabase.from('promotions').select('*').order('created_at', { ascending: false });
     if (data) setPromotions(data);
     setLoading(false);
@@ -83,18 +85,15 @@ export default function Promotions() {
     } 
     else if (dealType === 'fixed') {
       regularPrice = price1 + price2;
-      // Si el usuario pone un precio fijo mayor al regular, no hay descuento (protección visual)
       finalPrice = formData.value > 0 ? formData.value : regularPrice;
       savings = regularPrice - finalPrice;
-      // Calculamos el porcentaje inverso para que App.tsx funcione
       calculatedPercent = regularPrice > 0 ? ((savings / regularPrice) * 100) : 0;
     } 
     else if (dealType === '2x1') {
-      // Asumimos 2 unidades del producto 1
       regularPrice = price1 * 2; 
-      finalPrice = price1; // Paga 1
+      finalPrice = price1; 
       savings = price1;
-      calculatedPercent = 50; // Matemáticamente un 2x1 es 50% de descuento sobre el total de 2 items
+      calculatedPercent = 50; 
     }
 
     return { regularPrice, finalPrice, savings, calculatedPercent, p1, p2 };
@@ -121,7 +120,6 @@ export default function Promotions() {
         product_1_id: formData.product_1_id,
         product_2_id: formData.product_2_id || null,
         type: dealType,
-        // CLAVE: Guardamos el porcentaje calculado para que App.tsx funcione sin cambios
         discount_percentage: Math.round(previewData?.calculatedPercent || 0), 
         fixed_price: dealType === 'fixed' ? formData.value : null
       };
@@ -148,19 +146,27 @@ export default function Promotions() {
       }
   };
 
+  // --- REFACTORIZADO A SOFT DELETE ---
   const handleDeletePromo = async (id: any, name: string) => {
-      if (!confirm("¿Eliminar esta promoción definitivamente?")) return;
+      if (!confirm("¿Eliminar esta promoción?")) return;
 
       if (isDemo) {
           setPromotions(promotions.filter(p => p.id !== id));
           return;
       }
 
-      const { error } = await supabase.from('promotions').delete().eq('id', id);
-      if (error) alert("Error: " + error.message);
-      else {
-          logAction('ELIMINAR_PROMO', `Borrada: ${name}`, 'Promociones');
-          fetchData();
+      // CAMBIO: Update deleted_at en lugar de delete()
+      const { error } = await supabase
+        .from('promotions')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) {
+          alert("Error: " + error.message);
+      } else {
+          logAction('ELIMINAR_PROMO', `Borrada (Soft): ${name}`, 'Promociones');
+          // Recargamos la lista. Gracias a RLS, la promo borrada ya no vendrá en el select.
+          fetchData(); 
       }
   };
 

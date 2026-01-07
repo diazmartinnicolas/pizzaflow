@@ -25,20 +25,39 @@ export const Login = () => {
     }
   };
 
-  const handleDemoLogin = async () => {
+const handleDemoLogin = async () => {
     setLoading(true);
     setError(null);
     try {
-      // Mantenemos el email técnico original si ya existe en la BD, 
-      // o puedes crear uno nuevo en Supabase que sea demo@fluxo.com
-      const { error } = await supabase.auth.signInWithPassword({
-        email: 'demo@pizzaflow.com', 
-        password: 'pizza123',
+      // 1. Iniciar sesión
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: 'demo@fluxo.com',
+        password: 'fluxo123',
       });
-      if (error) throw error;
+      if (authError) throw authError;
+
+      // 2. EJECUTAR RESET (Con espera y alerta de error)
+      const DEMO_COMPANY_ID = '17ea9272-bf9d-406d-bca3-01fc75d08032'; 
+      
+      console.log("Iniciando reseteo de Demo...");
+      const { error: rpcError } = await supabase.rpc('reset_demo_data', { 
+        target_company_id: DEMO_COMPANY_ID 
+      });
+
+      if (rpcError) {
+        // ¡ESTO ES NUEVO! Nos avisará si falla
+        alert("Error crítico al resetear la Demo: " + rpcError.message + ". Los datos viejos podrían persistir.");
+        console.error("Error RPC:", rpcError);
+      } else {
+        console.log("¡Reseteo completado con éxito!");
+        // 3. ¡EL TRUCO FINAL! Forzar recarga para asegurar datos frescos
+        // Esto asegura que la App no use datos en caché y muestre lo nuevo.
+        window.location.reload(); 
+      }
+      
     } catch (error: any) {
+      console.error("Error en login demo:", error);
       setError("Error al ingresar con la demo: " + error.message);
-    } finally {
       setLoading(false);
     }
   };

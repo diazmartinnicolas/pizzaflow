@@ -9,7 +9,7 @@ import {
 // Categorías del sistema (Actualizado con 'Mitades')
 const CATEGORIES = [
   'Pizzas', 
-  'Mitades', // <--- NUEVA CATEGORÍA AGREGADA
+  'Mitades', 
   'Milanesas', 
   'Hamburguesas', 
   'Empanadas', 
@@ -43,6 +43,7 @@ export default function Inventory() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
+      // Gracias a RLS, esto solo traerá productos donde deleted_at IS NULL
       const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -108,14 +109,23 @@ export default function Inventory() {
     }
   };
 
+  // --- SOFT DELETE IMPLEMENTADO ---
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`¿Eliminar "${name}"?\nEsta acción no se puede deshacer.`)) return;
+    if (!confirm(`¿Eliminar "${name}"?`)) return;
 
     try {
-      const { error } = await supabase.from('products').delete().eq('id', id);
+      // CAMBIO CRÍTICO: Usamos update en lugar de delete
+      const { error } = await supabase
+        .from('products')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+
       if (error) throw error;
       
-      await logAction('BORRAR_PROD', `Eliminado: ${name}`, 'Inventario');
+      await logAction('BORRAR_PROD', `Eliminado (Soft): ${name}`, 'Inventario');
+      
+      // Mantenemos la lógica visual original: Recargar la lista
+      // (RLS se encargará de filtrar el ítem borrado)
       fetchProducts();
     } catch (error: any) {
       alert("Error eliminando: " + error.message);

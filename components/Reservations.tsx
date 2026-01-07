@@ -13,7 +13,7 @@ export default function Reservations() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
-    name: '', // CAMBIO: Ahora usamos 'name' para coincidir con la BD
+    name: '',
     date: new Date().toISOString().split('T')[0], 
     time: '21:00',
     people: 2,
@@ -43,6 +43,7 @@ export default function Reservations() {
 
     // === MODO REAL (ADMIN) ===
     setIsDemo(false);
+    // Nota: RLS filtra automáticamente deleted_at IS NULL
     const { data, error } = await supabase
         .from('reservations')
         .select('*')
@@ -81,7 +82,7 @@ export default function Reservations() {
           const { error } = await supabase
               .from('reservations')
               .update({ 
-                  name: formData.name, // Usamos 'name'
+                  name: formData.name,
                   date: formData.date,
                   time: formData.time,
                   people: formData.people,
@@ -116,6 +117,7 @@ export default function Reservations() {
       }
   };
 
+  // --- REFACTORIZADO A SOFT DELETE ---
   const handleDelete = async (id: string, name: string) => {
       if(!confirm("¿Borrar esta reserva?")) return;
 
@@ -125,9 +127,15 @@ export default function Reservations() {
           return;
       }
 
-      const { error } = await supabase.from('reservations').delete().eq('id', id);
+      // CAMBIO: Update deleted_at en lugar de delete()
+      const { error } = await supabase
+        .from('reservations')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id);
+
       if (!error) {
-          await logAction('ELIMINAR_RESERVA', `Borrada: ${name}`, 'Reservas');
+          await logAction('ELIMINAR_RESERVA', `Borrada (Soft): ${name}`, 'Reservas');
+          // Al recargar, RLS filtrará la reserva borrada
           fetchReservations();
       } else {
           alert("Error: " + error.message);
