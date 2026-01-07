@@ -1,26 +1,16 @@
 import { useEffect, useState, useRef } from 'react';
-
 import { supabase } from './services/supabase'; 
-
 import { logAction } from './services/audit'; 
-
 import { Login } from './components/Login';
-
 import Kitchen from './components/Kitchen';
-
 import Inventory from './components/Inventory';
-
 import Customers from './components/Customers';
-
 import Promotions from './components/Promotions';
-
 import Users from './components/Users';
-
 import History from './components/History';
-
 import Reservations from './components/Reservations';
-
 import Reports from './components/Reports';
+import { calculateHalfHalfPrice } from './utils/pricing';
 
 
 
@@ -597,51 +587,31 @@ function App() {
 
   // --- LOGICA DE MITADES UNIFICADA (CORREGIDA) ---
 
-  const handleProductClick = (product: any) => {
-
-    
+  const handleProductClick = (product: any) => {    
 
     // CORRECCIÓN 1: Detección inteligente por Categoría O Nombre
 
     const isHalf = product.category === 'Mitades' || product.name.toLowerCase().includes('mitad');
 
-
-
     // CASO A: Producto normal (no es mitad)
-
     if (!isHalf) {
-
         addToCart(product);
-
         return;
-
     }
-
-
 
     // CASO B: Es Mitad, Click 1 (Guardar en memoria)
-
     if (!firstHalf) {
-
         setFirstHalf(product);
-
         if (navigator.vibrate) navigator.vibrate(50);
-
         return;
-
     }
 
-
-
     // CASO C: Es Mitad, Click 2 (Combinar y Agregar)
-
-    const secondHalf = product;
-
-    
+    const secondHalf = product;    
 
     // Regla de Negocio: Cobrar la más cara de las dos
 
-    const finalPrice = Math.max(firstHalf.price, secondHalf.price);
+    const finalPrice = calculateHalfHalfPrice(firstHalf.price, secondHalf.price);
 
     
 
