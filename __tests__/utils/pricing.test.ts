@@ -1,5 +1,5 @@
 import { expect, test, describe } from 'vitest';
-import { calculateHalfHalfPrice } from './pricing';
+import { calculateHalfHalfPrice } from '../utils/pricing';
 
 describe('Reglas de Precio - Pizza Mitad y Mitad', () => {
 

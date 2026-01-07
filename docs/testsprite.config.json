@@ -1,0 +1,8 @@
+{
+  "projectType": "react-vite",
+  "testDirectory": "src/__tests__",
+  "sourceDirectory": "src",
+  "ignoredFiles": ["node_modules", "dist", ".git"],
+  "contextFile": "docs/AI_CONTEXT.md",
+  "framework": "vitest"
+}
