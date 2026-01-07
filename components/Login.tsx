@@ -31,8 +31,8 @@ const handleDemoLogin = async () => {
     try {
       // 1. Iniciar sesión
       const { error: authError } = await supabase.auth.signInWithPassword({
-        email: 'demo@fluxo.com',
-        password: 'fluxo123',
+        email: import.meta.env.VITE_DEMO_EMAIL,
+        password: import.meta.env.VITE_DEMO_PASSWORD,
       });
       if (authError) throw authError;
 

@@ -37,8 +37,8 @@ export default function Promotions() {
     const { data: { user } } = await supabase.auth.getUser();
     const email = user?.email || '';
     
-    // Cargar productos para el select (Solo activos y no borrados)
-    // Nota: El RLS se encarga de filtrar deleted_at IS NULL, pero el filtro active es útil
+    // Cargar productos para el select (Solo activos)
+    // Usamos el filtro 'active' para que no aparezcan productos deshabilitados en el selector
     const { data: prodData } = await supabase.from('products').select('*').eq('active', true);
     if (prodData) setProducts(prodData);
 
@@ -54,9 +54,14 @@ export default function Promotions() {
         return;
     }
 
-    // MODO REAL
-    // Gracias a las políticas RLS implementadas, select('*') ya excluye los que tienen deleted_at
-    const { data } = await supabase.from('promotions').select('*').order('created_at', { ascending: false });
+    // MODO REAL - CORREGIDO
+    // Agregamos .is('deleted_at', null) para filtrar las borradas lógicamente
+    const { data } = await supabase
+        .from('promotions')
+        .select('*')
+        .is('deleted_at', null) // <--- FILTRO DE SOFT DELETE AÑADIDO
+        .order('created_at', { ascending: false });
+        
     if (data) setPromotions(data);
     setLoading(false);
   };
@@ -146,7 +151,7 @@ export default function Promotions() {
       }
   };
 
-  // --- REFACTORIZADO A SOFT DELETE ---
+  // --- REFACTORIZADO A SOFT DELETE (CORREGIDO) ---
   const handleDeletePromo = async (id: any, name: string) => {
       if (!confirm("¿Eliminar esta promoción?")) return;
 
@@ -155,18 +160,20 @@ export default function Promotions() {
           return;
       }
 
-      // CAMBIO: Update deleted_at en lugar de delete()
+      // 1. Ejecutar UPDATE en BD
       const { error } = await supabase
         .from('promotions')
-        .update({ deleted_at: new Date().toISOString() })
+        .update({ deleted_at: new Date().toISOString() }) // <--- SOFT DELETE
         .eq('id', id);
 
       if (error) {
           alert("Error: " + error.message);
       } else {
           logAction('ELIMINAR_PROMO', `Borrada (Soft): ${name}`, 'Promociones');
-          // Recargamos la lista. Gracias a RLS, la promo borrada ya no vendrá en el select.
-          fetchData(); 
+          
+          // 2. Actualizar ESTADO LOCAL VISUALMENTE
+          // Esto elimina el parpadeo de recarga y hace que la UI responda rápido
+          setPromotions(prevPromos => prevPromos.filter(p => p.id !== id));
       }
   };
 

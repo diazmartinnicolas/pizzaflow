@@ -1,3 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@media print {
+  /* Ocultar todo lo que no sea el área de impresión (si usas una clase específica) */
+  /* O simplemente limpiar los márgenes del navegador */
+  
+  @page {
+    margin: 0;
+    size: auto;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: white;
+  }
+
+  /* Ocultar encabezados y pies de página automáticos del navegador */
+  header, footer, .no-print {
+    display: none !important;
+  }
+}
