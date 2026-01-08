@@ -1,7 +1,12 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { Product, OrderItem, Order, OrderStatus, Customer } from '../types';
-import { Plus, Minus, Trash2, CheckCircle, Receipt, ShoppingCart, User as UserIcon, X, Tag } from 'lucide-react';
+import { 
+  Plus, Minus, Trash2, Receipt, ShoppingCart, 
+  User as UserIcon, X, Tag, Banknote, QrCode, CreditCard 
+} from 'lucide-react';
+// Importamos el botón
+import { WhatsAppButton } from './WhatsAppButton';
 
 const POS: React.FC = () => {
   const { products, addOrder, currentUser, customers, addCustomer, promotions } = useApp();
@@ -9,6 +14,10 @@ const POS: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  
+  // ESTADO PARA EL TIPO DE PAGO
+  const [paymentMethod, setPaymentMethod] = useState<'cash' | 'transfer' | 'card'>('cash');
+
   const [isCustomerModalOpen, setIsCustomerModalOpen] = useState(false);
   const [newCustomerData, setNewCustomerData] = useState({ firstName: '', lastName: '', phone: '', address: '' });
 
@@ -57,7 +66,7 @@ const POS: React.FC = () => {
     }));
   };
 
-  // Calculate Totals and Discounts
+  // Totales y Descuentos
   const { subtotal, discount, total, appliedPromos } = useMemo(() => {
     let subtotal = 0;
     cart.forEach(item => subtotal += item.price * item.quantity);
@@ -66,7 +75,7 @@ const POS: React.FC = () => {
     const activePromos = promotions.filter(p => p.active);
     const appliedPromos: string[] = [];
 
-    // Simple Discounts (Per Item)
+    // Descuentos Simples
     activePromos.filter(p => p.type === 'SIMPLE').forEach(promo => {
         const targetId = promo.targetProductIds[0];
         const cartItem = cart.find(i => i.productId === targetId);
@@ -82,10 +91,9 @@ const POS: React.FC = () => {
         }
     });
 
-    // Combo Discounts (Simplistic logic: If all items in combo are present, apply discount once per set)
+    // Descuentos Combo
     activePromos.filter(p => p.type === 'COMBO').forEach(promo => {
         const requiredIds = promo.targetProductIds;
-        // Find minimum quantity of sets available in cart
         const possibleSets = requiredIds.map(reqId => {
             const item = cart.find(i => i.productId === reqId);
             return item ? item.quantity : 0;
@@ -94,7 +102,6 @@ const POS: React.FC = () => {
 
         if (setsCount > 0) {
             let comboDiscount = 0;
-            // Calculate base price of the combo items to apply percentage
             let comboBasePrice = 0;
             requiredIds.forEach(id => {
                 const item = cart.find(i => i.productId === id);
@@ -111,9 +118,7 @@ const POS: React.FC = () => {
         }
     });
 
-    // Ensure total isn't negative
     const finalTotal = Math.max(0, subtotal - totalDiscount);
-
     return { subtotal, discount: totalDiscount, total: finalTotal, appliedPromos };
   }, [cart, promotions]);
 
@@ -145,13 +150,20 @@ const POS: React.FC = () => {
       createdByName: currentUser.name,
       createdAt: Date.now(),
       customerId: selectedCustomer?.id,
-      customerName: selectedCustomer ? `${selectedCustomer.firstName} ${selectedCustomer.lastName}` : 'Consumidor Final'
+      customerName: selectedCustomer ? `${selectedCustomer.firstName} ${selectedCustomer.lastName}` : 'Consumidor Final',
+      // Si tu base de datos guarda el método de pago, descomenta la siguiente línea:
+      // payment_type: paymentMethod 
     };
 
     addOrder(newOrder);
     setLastOrder(newOrder);
     setCart([]);
-    setSelectedCustomer(null);
+  };
+
+  const handleCloseModal = () => {
+    setLastOrder(null);
+    setSelectedCustomer(null); 
+    setPaymentMethod('cash');
   };
 
   return (
@@ -214,10 +226,10 @@ const POS: React.FC = () => {
            ) : (
              <div className="flex gap-2">
                 <select 
-                  className="flex-1 text-sm border-gray-300 rounded-lg p-2 border"
+                  className="flex-1 text-sm border-gray-300 rounded-lg p-2 border outline-none focus:ring-2 focus:ring-orange-200"
                   onChange={(e) => {
-                     const c = customers.find(cus => cus.id === e.target.value);
-                     if(c) setSelectedCustomer(c);
+                      const c = customers.find(cus => cus.id === e.target.value);
+                      if(c) setSelectedCustomer(c);
                   }}
                   value=""
                 >
@@ -228,7 +240,7 @@ const POS: React.FC = () => {
                 </select>
                 <button 
                   onClick={() => setIsCustomerModalOpen(true)}
-                  className="bg-gray-200 hover:bg-gray-300 p-2 rounded-lg text-gray-700"
+                  className="bg-gray-200 hover:bg-gray-300 p-2 rounded-lg text-gray-700 transition-colors"
                   title="Nuevo Cliente"
                 >
                   <Plus size={18} />
@@ -284,21 +296,56 @@ const POS: React.FC = () => {
           </div>
         )}
 
-        <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-xl space-y-2">
-          <div className="flex justify-between items-center text-sm text-gray-500">
-            <span>Subtotal</span>
-            <span>{formatPrice(subtotal)}</span>
+        <div className="p-4 border-t border-gray-100 bg-gray-50 rounded-b-xl space-y-3">
+          
+          {/* BOTONES DE PAGO */}
+          <div className="grid grid-cols-3 gap-2">
+            <button 
+              onClick={() => setPaymentMethod('cash')}
+              className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${
+                paymentMethod === 'cash' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <Banknote size={20} />
+              <span className="text-[10px] font-bold mt-1 uppercase">Efectivo</span>
+            </button>
+            <button 
+              onClick={() => setPaymentMethod('transfer')}
+              className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${
+                paymentMethod === 'transfer' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <QrCode size={20} />
+              <span className="text-[10px] font-bold mt-1 uppercase">Transf.</span>
+            </button>
+            <button 
+              onClick={() => setPaymentMethod('card')}
+              className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${
+                paymentMethod === 'card' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+              }`}
+            >
+              <CreditCard size={20} />
+              <span className="text-[10px] font-bold mt-1 uppercase">Tarjeta</span>
+            </button>
           </div>
-          {discount > 0 && (
-            <div className="flex justify-between items-center text-sm text-green-600 font-medium">
-              <span>Descuento</span>
-              <span>- {formatPrice(discount)}</span>
+
+          <div className="space-y-1">
+            <div className="flex justify-between items-center text-sm text-gray-500">
+                <span>Subtotal</span>
+                <span>{formatPrice(subtotal)}</span>
             </div>
-          )}
-          <div className="flex justify-between items-center pt-2 border-t border-gray-200">
-            <span className="text-gray-900 font-bold text-lg">Total</span>
-            <span className="text-2xl font-bold text-orange-600">{formatPrice(total)}</span>
+            {discount > 0 && (
+                <div className="flex justify-between items-center text-sm text-green-600 font-medium">
+                <span>Descuento</span>
+                <span>- {formatPrice(discount)}</span>
+                </div>
+            )}
+            <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                <span className="text-gray-900 font-bold text-lg">Total</span>
+                <span className="text-2xl font-bold text-orange-600">{formatPrice(total)}</span>
+            </div>
           </div>
+
           <button
             onClick={handleCheckout}
             disabled={cart.length === 0}
@@ -332,7 +379,7 @@ const POS: React.FC = () => {
                 onChange={e => setNewCustomerData({...newCustomerData, lastName: e.target.value})} 
               />
               <input 
-                placeholder="Teléfono" 
+                placeholder="Teléfono (Ej: 261...)" 
                 className="w-full border p-2 rounded" 
                 value={newCustomerData.phone} 
                 onChange={e => setNewCustomerData({...newCustomerData, phone: e.target.value})} 
@@ -352,12 +399,12 @@ const POS: React.FC = () => {
         </div>
       )}
 
-      {/* Ticket Modal */}
+      {/* TICKET DE VENTA (AQUÍ APARECE EL BOTÓN DE WHATSAPP) */}
       {lastOrder && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-lg w-full max-w-sm shadow-2xl relative animate-in fade-in zoom-in duration-300">
             <div className="text-center mb-6 border-b border-dashed border-gray-300 pb-4">
-              <h2 className="text-xl font-bold uppercase tracking-wider">PizzaFlow</h2>
+              <h2 className="text-xl font-bold uppercase tracking-wider">Fluxo</h2>
               <p className="text-xs text-gray-500">Ticket de Venta</p>
               <p className="text-sm font-mono mt-2">Orden #{lastOrder.id.slice(-6)}</p>
               <p className="text-xs text-gray-400">{new Date(lastOrder.createdAt).toLocaleString()}</p>
@@ -388,17 +435,44 @@ const POS: React.FC = () => {
                  <span>Total</span>
                  <span>{formatPrice(lastOrder.total)}</span>
                </div>
+               
+               <div className="text-center mt-2 text-xs bg-gray-100 p-1 rounded font-bold uppercase">
+                   PAGO: {paymentMethod === 'cash' ? 'EFECTIVO' : paymentMethod === 'transfer' ? 'TRANSFERENCIA' : 'TARJETA'}
+               </div>
             </div>
             
             <div className="flex flex-col gap-2 mt-6">
+              
+              {/* BOTÓN WHATSAPP DE CONFIRMACIÓN */}
+              <div className="w-full">
+                  <WhatsAppButton 
+                    className="w-full" /* 👈 ¡AQUÍ ESTÁ EL ARREGLO! (Se estirará al 100%) */
+                    type="CONFIRMED"
+                    order={{
+                        id: lastOrder.id.slice(-6),
+                        customerName: lastOrder.customerName,
+                        phone: selectedCustomer?.phone || '',
+                        total: lastOrder.total,
+                        paymentMethod: paymentMethod, 
+                        items: lastOrder.items.map(i => ({ quantity: i.quantity, name: i.productName }))
+                    }}
+                  />
+                  {!selectedCustomer && (
+                    <p className="text-[10px] text-red-500 text-center mt-1">
+                        * Sin cliente seleccionado no se envía mensaje
+                    </p>
+                  )}
+              </div>
+
               <button 
                 onClick={() => window.print()} 
                 className="w-full bg-gray-900 text-white py-2 rounded flex items-center justify-center gap-2 hover:bg-gray-800"
               >
-                <Receipt size={16} /> Imprimir
+                <Receipt size={16} /> Imprimir Ticket
               </button>
+              
               <button 
-                onClick={() => setLastOrder(null)} 
+                onClick={handleCloseModal} 
                 className="w-full bg-orange-100 text-orange-700 py-2 rounded hover:bg-orange-200"
               >
                 Cerrar

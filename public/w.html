@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Conectando...</title>
+</head>
+<body>
+    <script>
+        // TRUCO DE PASAMANOS:
+        // No leemos variables individuales. Agarramos toda la "cadena de búsqueda" (?phone=...&text=...)
+        // que ya viene correctamente codificada desde la App.
+        const queryParams = window.location.search;
+
+        if (queryParams && queryParams.length > 1) {
+            // Pegamos la cadena intacta a la dirección de WhatsApp
+            window.location.replace("https://web.whatsapp.com/send" + queryParams);
+        } else {
+            document.body.innerHTML = "<h2>⚠️ Error: No llegaron datos del pedido.</h2>";
+        }
+    </script>
+    
+    <div style="display:flex; justify-content:center; align-items:center; height:100vh; background:#f0f2f5; font-family:sans-serif; color:#54656f;">
+        <div style="text-align:center;">
+            <p style="font-size: 24px; margin-bottom: 10px;">🚀</p>
+            <p>Abriendo WhatsApp...</p>
+        </div>
+    </div>
+</body>
+</html>

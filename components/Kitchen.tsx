@@ -2,6 +2,8 @@ import { useEffect, useState, useRef, forwardRef } from 'react';
 import { supabase } from '../services/supabase';
 import { useReactToPrint } from 'react-to-print';
 import { CheckCircle, Clock, RefreshCw, ChefHat, XCircle, Printer } from 'lucide-react';
+// IMPORTAMOS EL BOTÓN NUEVO
+import { WhatsAppButton } from './WhatsAppButton';
 
 // --- COMPONENTE TICKET TÉRMICO (Visible solo al imprimir) ---
 const KitchenTicket = forwardRef<HTMLDivElement, { order: any; companyName?: string }>(({ order, companyName }, ref) => {
@@ -125,8 +127,6 @@ export default function Kitchen({ demoOrders = [], onDemoComplete, companyName }
   const fetchOrders = async () => {
     setLoading(true);
     try {
-        // ACTUALIZADO: Se agregó 'address' a la relación client:clients(...)
-        // SE RESPETÓ LA REGLA: Sin comentarios dentro del string
         const { data: realOrders, error } = await supabase
         .from('orders')
         .select(`
@@ -289,6 +289,23 @@ export default function Kitchen({ demoOrders = [], onDemoComplete, companyName }
                     >
                         <XCircle size={20} />
                     </button>
+
+                    {/* --- NUEVO BOTÓN WHATSAPP --- */}
+                    <WhatsAppButton 
+                        type="DELIVERY"
+                        order={{
+                            id: order.ticket_number,
+                            customerName: order.client?.name || 'Cliente',
+                            phone: order.client?.phone || '',
+                            total: order.total,
+                            paymentMethod: order.payment_type || 'cash',
+                            // Transformamos los items al formato que espera el botón
+                            items: order.order_items.map((item: any) => ({
+                                quantity: item.quantity,
+                                name: item.product?.name || 'Item'
+                            }))
+                        }}
+                    />
 
                     {/* BOTÓN LISTO */}
                     <button 
