@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { supabase } from '../services/supabase';
 import { Flame, ChefHat, ArrowRight, Lock } from 'lucide-react';
+// 👇 IMPORTANTE: Importamos la lógica nueva de Demo
+import { resetDemoData } from '../services/demo';
 
 export const Login = () => {
   const [loading, setLoading] = useState(false);
@@ -25,35 +27,32 @@ export const Login = () => {
     }
   };
 
-const handleDemoLogin = async () => {
+  const handleDemoLogin = async () => {
     setLoading(true);
     setError(null);
     try {
-      // 1. Iniciar sesión
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: import.meta.env.VITE_DEMO_EMAIL,
-        password: import.meta.env.VITE_DEMO_PASSWORD,
+      // 1. Iniciar sesión (Usamos tus variables de entorno o un fallback)
+      const demoEmail = import.meta.env.VITE_DEMO_EMAIL || 'demo@fluxo.com';
+      const demoPass = import.meta.env.VITE_DEMO_PASSWORD || 'demo1234';
+
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: demoEmail,
+        password: demoPass,
       });
+      
       if (authError) throw authError;
 
-      // 2. EJECUTAR RESET (Con espera y alerta de error)
-      const DEMO_COMPANY_ID = '17ea9272-bf9d-406d-bca3-01fc75d08032'; 
-      
-      console.log("Iniciando reseteo de Demo...");
-      const { error: rpcError } = await supabase.rpc('reset_demo_data', { 
-        target_company_id: DEMO_COMPANY_ID 
-      });
-
-      if (rpcError) {
-        // ¡ESTO ES NUEVO! Nos avisará si falla
-        alert("Error crítico al resetear la Demo: " + rpcError.message + ". Los datos viejos podrían persistir.");
-        console.error("Error RPC:", rpcError);
-      } else {
-        console.log("¡Reseteo completado con éxito!");
-        // 3. ¡EL TRUCO FINAL! Forzar recarga para asegurar datos frescos
-        // Esto asegura que la App no use datos en caché y muestre lo nuevo.
-        window.location.reload(); 
+      // 2. EJECUTAR RESET LOCAL (CORRECCIÓN 🛠️)
+      // En lugar de supabase.rpc, usamos tu nuevo archivo local
+      if (data.user) {
+          console.log("🔄 Iniciando reseteo LOCAL de Demo...");
+          await resetDemoData(data.user.id);
       }
+
+      console.log("¡Reseteo completado con éxito!");
+      
+      // 3. Recargar para ver los datos frescos
+      window.location.reload(); 
       
     } catch (error: any) {
       console.error("Error en login demo:", error);
