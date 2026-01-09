@@ -65,3 +65,32 @@ export const getWhatsAppLink = (
   // 👇 EL CAMBIO CLAVE: Usamos el protocolo de APP
   return `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
 };
+
+// 👇 NUEVA FUNCIÓN PARA RESERVAS
+export const getReservationLink = (data: { 
+  customerName: string; 
+  date: string; 
+  time: string; 
+  pax: number; 
+  phone: string; 
+}): string => {
+  const { customerName, date, time, pax, phone } = data;
+
+  // 1. Limpieza de teléfono
+  let cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length === 10) cleanPhone = '549' + cleanPhone;
+  else if (cleanPhone.length === 12 && cleanPhone.startsWith('54')) cleanPhone = cleanPhone.replace('54', '549');
+
+  // 2. Armado del mensaje
+  // Formateamos la fecha para que se vea bonita (ej: 2024-02-20 -> 20/02/2024)
+  const formattedDate = new Date(date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+
+  let message = `Hola ${customerName}! 👋\n`;
+  message += `✅ *Confirmamos tu reserva.*\n\n`;
+  message += `📅 Fecha: ${formattedDate}\n`;
+  message += `⏰ Hora: ${time} hs\n`;
+  message += `👥 Personas: ${pax}\n\n`;
+  message += `📍 Te esperamos!`;
+
+  return `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
+};
