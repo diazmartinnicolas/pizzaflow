@@ -78,11 +78,15 @@ export default function Inventory({ onProductUpdate }: InventoryProps) {
     setIsModalOpen(true);
   };
 
+// Búscala dentro de src/components/Inventory.tsx y reemplázala por esta versión:
+
   const handleSave = async () => {
     try {
+      // 1. Validación de formulario
       ProductSchema.parse(formData);
 
       if (editingProduct) {
+        // --- MODO EDICIÓN (Normal) ---
         const { error } = await supabase
           .from('products')
           .update(formData)
@@ -90,28 +94,72 @@ export default function Inventory({ onProductUpdate }: InventoryProps) {
 
         if (error) throw error;
         await logAction('EDITAR_PROD', `Producto: ${formData.name}`, 'Inventario');
-      } else {
-        const { error } = await supabase
-          .from('products')
-          .insert([formData]);
 
-        if (error) throw error;
-        await logAction('CREAR_PROD', `Nuevo: ${formData.name}`, 'Inventario');
+      } else {
+        // --- MODO CREACIÓN (Con Truco de Reciclaje) ---
+        
+        // Paso A: Verificamos si ya existe ese nombre (incluso si está borrado)
+        const { data: existingProduct, error: searchError } = await supabase
+            .from('products')
+            .select('*')
+            .eq('name', formData.name) // Buscamos coincidencia exacta de nombre
+            .maybeSingle(); // Usamos maybeSingle para que no de error si no encuentra nada
+
+        if (searchError) throw searchError;
+
+        if (existingProduct) {
+            // Paso B: Si existe...
+            if (existingProduct.deleted_at) {
+                // ...y está borrado: ¡LO REVIVIMOS! 🧟‍♂️
+                // Confirmamos si el usuario quiere restaurarlo o lo hacemos silencioso
+                // Aquí lo hacemos automático para mejor experiencia:
+                const { error } = await supabase
+                    .from('products')
+                    .update({
+                        ...formData,       // Ponemos los nuevos datos (precio, cat, etc)
+                        deleted_at: null,  // Quitamos la marca de borrado
+                        active: true       // Lo activamos
+                    })
+                    .eq('id', existingProduct.id);
+
+                if (error) throw error;
+                await logAction('RESTAURAR_PROD', `Restaurado: ${formData.name}`, 'Inventario');
+                alert(`♻️ El producto "${formData.name}" existía en la papelera y ha sido recuperado.`);
+
+            } else {
+                // ...y está activo: Es un duplicado real. Error.
+                throw new Error("¡Ya existe un producto activo con este nombre!");
+            }
+        } else {
+            // Paso C: No existe nada, creamos uno nuevo (Normal)
+            const { error } = await supabase
+                .from('products')
+                .insert([formData]);
+
+            if (error) throw error;
+            await logAction('CREAR_PROD', `Nuevo: ${formData.name}`, 'Inventario');
+        }
       }
 
-      // Recargamos lista local
+      // Finalizar: Recargamos todo
       fetchProducts();
       setIsModalOpen(false);
       
-      // 👇 2. AVISAMOS A LA APP PRINCIPAL QUE RECARGUE EL POS
+      // Avisamos a App.tsx
       if (onProductUpdate) onProductUpdate();
 
     } catch (error: any) {
+      // Manejo de errores
       if (error instanceof z.ZodError) {
         alert("⚠️ Validación: " + error.issues[0].message);
       } else {
         console.error("Error guardando:", error);
-        alert("Error guardando producto: " + error.message);
+        // Si el error es de duplicado (por si acaso falló nuestra lógica anterior), lo traducimos
+        if (error.message.includes('unique constraint') || error.code === '23505') {
+            alert("⚠️ Error: Ya existe un producto con ese nombre exacto.");
+        } else {
+            alert("Error: " + error.message);
+        }
       }
     }
   };
