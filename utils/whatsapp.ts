@@ -23,21 +23,13 @@ export const getWhatsAppLink = (
 ): string => {
   const { phone, customerName, orderId, total, paymentMethod, items } = data;
 
-  // 1. Limpieza de teléfono (Lógica Argentina)
+  // Limpieza de teléfono
   let cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length === 10) cleanPhone = '549' + cleanPhone;
+  else if (cleanPhone.length === 12 && cleanPhone.startsWith('54')) cleanPhone = cleanPhone.replace('54', '549');
 
-  if (cleanPhone.length === 10) {
-    cleanPhone = '549' + cleanPhone;
-  } 
-  else if (cleanPhone.length === 12 && cleanPhone.startsWith('54')) {
-    cleanPhone = cleanPhone.replace('54', '549');
-  }
-
-  // 2. Armado del mensaje
-  const itemsList = items
-    .map(item => `- ${item.quantity}x ${item.name}`)
-    .join('\n');
-
+  // Armado del mensaje de PEDIDOS
+  const itemsList = items.map(item => `- ${item.quantity}x ${item.name}`).join('\n');
   let message = '';
 
   if (type === 'CONFIRMED') {
@@ -62,11 +54,10 @@ export const getWhatsAppLink = (
     message += `Gracias por elegirnos!`;
   }
 
-  // 👇 EL CAMBIO CLAVE: Usamos el protocolo de APP
   return `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
 };
 
-// 👇 NUEVA FUNCIÓN PARA RESERVAS
+// 👇 AQUÍ ESTÁ LA CORRECCIÓN DE LA FECHA PARA RESERVAS
 export const getReservationLink = (data: { 
   customerName: string; 
   date: string; 
@@ -81,9 +72,21 @@ export const getReservationLink = (data: {
   if (cleanPhone.length === 10) cleanPhone = '549' + cleanPhone;
   else if (cleanPhone.length === 12 && cleanPhone.startsWith('54')) cleanPhone = cleanPhone.replace('54', '549');
 
-  // 2. Armado del mensaje
-  // Formateamos la fecha para que se vea bonita (ej: 2024-02-20 -> 20/02/2024)
-  const formattedDate = new Date(date).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' });
+  // 2. FORMATEO MANUAL DE FECHA (Sin Zonas Horarias) 🛡️
+  // Si la fecha viene como "2026-01-12" o "2026-01-12T00:00:00"
+  
+  let dateOnly = date;
+  // Si tiene la "T" de tiempo, la cortamos
+  if (date.includes('T')) {
+    dateOnly = date.split('T')[0];
+  }
+
+  // Cortamos el string por los guiones: ["2026", "01", "12"]
+  const parts = dateOnly.split('-');
+  
+  // Reordenamos: Día/Mes/Año
+  // parts[2] es día, parts[1] es mes, parts[0] es año
+  const formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`; 
 
   let message = `Hola ${customerName}! 👋\n`;
   message += `✅ *Confirmamos tu reserva.*\n\n`;
@@ -91,6 +94,27 @@ export const getReservationLink = (data: {
   message += `⏰ Hora: ${time} hs\n`;
   message += `👥 Personas: ${pax}\n\n`;
   message += `📍 Te esperamos!`;
+
+  return `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
+};
+
+// 👇 NUEVA FUNCIÓN PARA CUMPLEAÑOS
+export const getBirthdayLink = (data: { 
+  customerName: string; 
+  phone: string; 
+  discountText?: string; // Ej: "20% OFF" o "una bebida de regalo"
+}): string => {
+  const { customerName, phone, discountText = "un regalo especial" } = data;
+
+  // Limpieza de teléfono
+  let cleanPhone = phone.replace(/\D/g, '');
+  if (cleanPhone.length === 10) cleanPhone = '549' + cleanPhone;
+  else if (cleanPhone.length === 12 && cleanPhone.startsWith('54')) cleanPhone = cleanPhone.replace('54', '549');
+
+  let message = `¡Feliz Cumpleaños ${customerName}! 🎂🎈\n\n`;
+  message += `Queremos festejar con vos en tu día.\n`;
+  message += `🎁 Tenés *${discountText}* para usar hoy en tu pedido.\n\n`;
+  message += `¡Esperamos que pases un día genial! 🥂`;
 
   return `whatsapp://send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
 };
