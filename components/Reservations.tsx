@@ -48,7 +48,6 @@ export default function Reservations() {
 
   const handleSave = async () => {
     if (!formData.client_name) return alert("Falta el nombre del cliente");
-    // Nota: El teléfono es opcional para guardar, pero necesario para WhatsApp
     
     try {
       const { data, error } = await supabase
@@ -87,7 +86,6 @@ export default function Reservations() {
   const handleDelete = async (id: string) => {
     if (!confirm("¿Borrar esta reserva?")) return;
 
-    // OPTIMISTIC UI
     setReservations(prev => prev.filter(r => r.id !== id));
 
     try {
@@ -107,7 +105,7 @@ export default function Reservations() {
     if (!reservation.phone) return alert("No hay teléfono cargado.");
 
     const link = getReservationLink({
-        customerName: reservation.client_name || 'Cliente', // Protección extra
+        customerName: reservation.client_name || 'Cliente', 
         date: reservation.date,
         time: reservation.time,
         pax: reservation.pax,
@@ -122,12 +120,19 @@ export default function Reservations() {
       await supabase.from('reservations').update({ status: 'confirmada' }).eq('id', id);
   };
 
-  // 👇 AQUÍ ESTABA EL ERROR. AHORA ESTÁ BLINDADO 🛡️
   const filtered = reservations.filter(r => {
-    // Si r.client_name es null, usamos '' (texto vacío) para que no explote
     const name = r.client_name || ''; 
     return name.toLowerCase().includes(searchTerm.toLowerCase());
   });
+
+  // 👇 FUNCIÓN AUXILIAR PARA FECHAS SEGURAS (Sin Timezone)
+  const formatDateSafe = (dateString: string) => {
+      if (!dateString) return '';
+      // Cortamos "YYYY-MM-DD" por el guion
+      const [year, month, day] = dateString.split('-');
+      // Devolvemos "DD/MM/YYYY" directamente
+      return `${day}/${month}/${year}`;
+  };
 
   return (
     <div className="p-6 h-full flex flex-col bg-gray-50">
@@ -171,13 +176,13 @@ export default function Reservations() {
                 filtered.map(res => (
                     <tr key={res.id} className="hover:bg-gray-50 transition-colors group">
                         <td className="p-4">
-                            {/* Protección extra visual por si no hay nombre */}
                             <div className="font-bold text-gray-800">{res.client_name || 'Sin Nombre'}</div>
                             {res.phone && <div className="text-xs text-gray-400 flex items-center gap-1"><Phone size={10}/> {res.phone}</div>}
                             {res.notes && <div className="text-xs text-orange-500 italic mt-1">"{res.notes}"</div>}
                         </td>
                         <td className="p-4">
-                            <div className="text-sm font-medium">{new Date(res.date).toLocaleDateString()}</div>
+                            {/* 👇 USAMOS LA FUNCIÓN SEGURA AQUÍ */}
+                            <div className="text-sm font-medium">{formatDateSafe(res.date)}</div>
                             <div className="text-xs text-gray-500">{res.time} hs</div>
                         </td>
                         <td className="p-4">
