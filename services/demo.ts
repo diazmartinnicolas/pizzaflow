@@ -27,23 +27,23 @@ export const resetDemoData = async (userId: string) => {
     // 3. CREAR CLIENTES (Con Cumpleaños Dinámico 🎂)
     const today = new Date();
     const todayStr = today.toISOString().split('T')[0];
-    
+
     await supabase.from('clients').insert([
-      { 
-        user_id: userId, 
-        name: 'Martín (Cumpleañero)', 
-        address: 'Av. Siempre Viva 123', 
-        phone: '5491122334455', 
+      {
+        user_id: userId,
+        name: 'Martín (Cumpleañero)',
+        address: 'Av. Siempre Viva 123',
+        phone: '5491122334455',
         birth_date: todayStr, // Cumple hoy
-        is_active: true 
+        is_active: true
       },
-      { 
-        user_id: userId, 
-        name: 'Mauro Petriella', 
-        address: 'Calle Falsa 123', 
-        phone: '5491155667788', 
-        birth_date: '1995-05-20', 
-        is_active: true 
+      {
+        user_id: userId,
+        name: 'Mauro Petriella',
+        address: 'Calle Falsa 123',
+        phone: '5491155667788',
+        birth_date: '1995-05-20',
+        is_active: true
       }
     ]);
 
@@ -53,32 +53,32 @@ export const resetDemoData = async (userId: string) => {
     const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
     await supabase.from('reservations').insert([
-      { 
-        user_id: userId, 
-        client_name: 'Familia Pérez', 
-        date: tomorrowStr, 
-        time: '21:00', 
-        pax: 4, 
-        phone: '5491122334455',       
-        status: 'pendiente', 
-        notes: 'Mesa cerca de la ventana' 
+      {
+        user_id: userId,
+        client_name: 'Familia Pérez',
+        date: tomorrowStr,
+        time: '21:00',
+        pax: 4,
+        phone: '5491122334455',
+        status: 'pendiente',
+        notes: 'Mesa cerca de la ventana'
       },
-      { 
-        user_id: userId, 
-        client_name: 'Reunión Amigos', 
-        date: todayStr, 
-        time: '22:30', 
-        pax: 6,                        
-        phone: '5491155667788',        
-        status: 'confirmada', 
-        notes: '' 
+      {
+        user_id: userId,
+        client_name: 'Reunión Amigos',
+        date: todayStr,
+        time: '22:30',
+        pax: 6,
+        phone: '5491155667788',
+        status: 'confirmada',
+        notes: ''
       }
     ]);
 
     // 5. CREAR PEDIDO
     if (products && products.length > 0) {
       const { data: order } = await supabase.from('orders').insert([
-        { user_id: userId, customer_name: 'Mesa 5', status: 'pending', total: 25500, payment_method: 'cash' }
+        { user_id: userId, customer_name: 'Mesa 5', status: 'pending', total: 25500, payment_method: 'cash', ticket_number: 1 }
       ]).select().single();
 
       if (order) {

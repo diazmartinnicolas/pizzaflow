@@ -90,9 +90,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const createOrder = async (orderData: any, items: any[]) => {
+    // 1. Calcular el siguiente número de ticket para hoy
+    const today = new Date().toISOString().split('T')[0];
+    const { data: lastOrder } = await supabase
+      .from('orders')
+      .select('ticket_number')
+      .eq('company_id', userProfile?.company_id)
+      .gte('created_at', `${today}T00:00:00`)
+      .order('ticket_number', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const nextTicket = (lastOrder?.ticket_number || 0) + 1;
+
+    // 2. Insertar con el número calculado
     const { data: order, error: orderErr } = await supabase
       .from('orders')
-      .insert([orderData])
+      .insert([{ ...orderData, ticket_number: nextTicket }])
       .select()
       .single();
 
