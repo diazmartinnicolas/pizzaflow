@@ -90,23 +90,40 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const createOrder = async (orderData: any, items: any[]) => {
-    // 1. Calcular el siguiente número de ticket para hoy
-    const today = new Date().toISOString().split('T')[0];
-    const { data: lastOrder } = await supabase
-      .from('orders')
-      .select('ticket_number')
-      .eq('company_id', userProfile?.company_id)
-      .gte('created_at', `${today}T00:00:00`)
-      .order('ticket_number', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    // 1. Obtener la compañía (prioridad al perfil, luego a lo que venga en orderData)
+    const companyId = userProfile?.company_id || orderData.company_id || (userProfile as any)?.companies?.id;
 
-    const nextTicket = (lastOrder?.ticket_number || 0) + 1;
+    // 2. Calcular el siguiente número de ticket para hoy (usando fecha local para el reset)
+    const localDate = new Date();
+    const today = `${localDate.getFullYear()}-${String(localDate.getMonth() + 1).padStart(2, '0')}-${String(localDate.getDate()).padStart(2, '0')}`;
 
-    // 2. Insertar con el número calculado
+    let nextTicket = 1;
+    try {
+      const { data: lastOrder } = await supabase
+        .from('orders')
+        .select('ticket_number')
+        .eq('company_id', companyId)
+        .gte('created_at', `${today}T00:00:00`)
+        .order('ticket_number', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastOrder && lastOrder.ticket_number) {
+        nextTicket = lastOrder.ticket_number + 1;
+      }
+    } catch (err) {
+      console.error("Error calculando secuencia de ticket:", err);
+      // Fallback a 1 si falla la consulta
+    }
+
+    // 3. Insertar con el número calculado y asegurando el company_id
     const { data: order, error: orderErr } = await supabase
       .from('orders')
-      .insert([{ ...orderData, ticket_number: nextTicket }])
+      .insert([{
+        ...orderData,
+        ticket_number: nextTicket,
+        company_id: companyId
+      }])
       .select()
       .single();
 
