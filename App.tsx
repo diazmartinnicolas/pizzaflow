@@ -176,8 +176,20 @@ function App() {
 
     if (isDemo) {
       setTimeout(() => {
-        const ticket = Math.floor(Math.random() * 1000) + 1000;
-        setDemoOrders(prev => [{ id: Date.now(), ticket_number: ticket, created_at: new Date().toISOString(), status: 'pendiente', client: { name: clientSearchTerm }, order_items: cart.map(i => ({ product: { name: i.name }, quantity: 1 })) }, ...prev]);
+        // Lógica de ticket secuencial para Demo (simulada)
+        const todayKey = `fluxo_demo_ticket_${new Date().toISOString().split('T')[0]}`;
+        const lastTicket = parseInt(localStorage.getItem(todayKey) || '0');
+        const nextTicket = lastTicket + 1;
+        localStorage.setItem(todayKey, nextTicket.toString());
+
+        setDemoOrders(prev => [{
+          id: Date.now(),
+          ticket_number: nextTicket,
+          created_at: new Date().toISOString(),
+          status: 'pendiente',
+          client: { name: clientSearchTerm },
+          order_items: cart.map(i => ({ product: { name: i.name }, quantity: 1 }))
+        }, ...prev]);
         setCart([]); setSelectedCustomerId(''); setClientSearchTerm(''); setMobileView('products'); setIsProcessing(false);
       }, 600);
       return;
