@@ -4,6 +4,7 @@ import { Flame, ChefHat, ArrowRight, Lock } from 'lucide-react';
 // 👇 IMPORTANTE: Importamos la lógica nueva de Demo
 import { resetDemoData } from '../services/demo';
 import { LoginSchema } from '../schemas/auth';
+import { toast } from 'sonner';
 import { z } from 'zod';
 
 export const Login = () => {
@@ -71,6 +72,35 @@ export const Login = () => {
     }
   };
 
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError("Por favor ingresa tu email para recuperar la contraseña");
+      return;
+    }
+
+    if (email.toLowerCase() !== 'diazmartinnicolas@gmail.com') {
+      setError("La recuperación por email solo está disponible para la cuenta principal del CEO.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const redirectUrl = window.location.origin;
+      console.log("🔗 Solicitando recuperación con redirect_to:", redirectUrl);
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
+      if (error) throw error;
+      toast.success("Se ha enviado un enlace de recuperación a tu correo.");
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
       <div className="bg-gray-800 rounded-2xl shadow-xl w-full max-w-md overflow-hidden border border-gray-700">
@@ -131,6 +161,17 @@ export const Login = () => {
                 </>
               )}
             </button>
+
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-orange-400 hover:text-orange-300 text-sm font-medium transition-colors"
+                disabled={loading}
+              >
+                ¿Olvidaste tu contraseña? (Solo CEO)
+              </button>
+            </div>
           </form>
 
           {/* Separador */}

@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { z } from 'zod';
 import { useApp } from './context/AppContext';
+import { supabase } from './services/supabase';
 import { Login } from './components/Login';
 import Kitchen from './components/Kitchen';
 import Inventory from './components/Inventory';
@@ -19,7 +20,7 @@ import { StatusOverlay } from './components/ui/StatusOverlay';
 import {
   ShoppingCart, ChefHat, Users as UsersIcon, Package, Percent,
   History as HistoryIcon, UserCog, LogOut, Search, CalendarClock, Menu, Receipt,
-  LayoutDashboard, Monitor, Crown, BarChart3, Briefcase, Tag,
+  LayoutDashboard, Monitor, Crown, BarChart3, Briefcase, Tag, Lock,
   Building2, Flame, Trash2, Banknote, QrCode, CreditCard, MapPin, Phone, Star, Split, X, Plus, Minus, UserPlus
 } from 'lucide-react';
 
@@ -67,6 +68,17 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Escuchar eventos de Auth (Recuperación de contraseña)
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        console.log("🛠️ Modo recuperación detectado");
+        setShowPasswordModal(true);
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   const searchContainerRef = useRef<HTMLDivElement>(null);
@@ -235,6 +247,27 @@ function App() {
     }
   };
 
+  const handlePasswordUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword.length < 6) {
+      toast.error("La contraseña debe tener al menos 6 caracteres");
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      toast.success("Contraseña actualizada con éxito");
+      setShowPasswordModal(false);
+      setNewPassword('');
+    } catch (error: any) {
+      toast.error("Error al actualizar contraseña: " + error.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   if (loading) return (
     <div className="h-dvh flex flex-col items-center justify-center bg-gray-50">
       <Flame className="w-12 h-12 text-orange-500 animate-spin opacity-50 mb-4" />
@@ -295,7 +328,19 @@ function App() {
             )}
           </nav>
         </div>
-        <div className="p-4 border-t"><button onClick={signOut} className="flex items-center justify-center gap-2 w-full p-2.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all font-medium text-sm border border-gray-100"><LogOut size={18} /> Salir</button></div>
+        <div className="p-4 border-t space-y-2">
+          {!isDemo && (
+            <button
+              onClick={() => setShowPasswordModal(true)}
+              className="flex items-center justify-center gap-2 w-full p-2.5 text-gray-600 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all font-medium text-sm border border-gray-100"
+            >
+              <Lock size={18} /> Cambiar Contraseña
+            </button>
+          )}
+          <button onClick={signOut} className="flex items-center justify-center gap-2 w-full p-2.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all font-medium text-sm border border-gray-100">
+            <LogOut size={18} /> Salir
+          </button>
+        </div>
       </aside>
 
       {/* MOBILE HEADER */}
@@ -411,6 +456,35 @@ function App() {
               <input className="w-full p-3 border rounded-lg" placeholder="Teléfono" value={newClientData.phone} onChange={e => setNewClientData({ ...newClientData, phone: e.target.value })} />
             </div>
             <div className="flex gap-2"><button onClick={() => setShowQuickCustomer(false)} className="flex-1 py-3 bg-gray-100 rounded-lg">Cancelar</button><button onClick={handleQuickCustomerCreate} className="flex-1 py-3 bg-orange-600 text-white font-bold rounded-lg uppercase text-sm">Guardar</button></div>
+          </div>
+        </div>
+      )}
+      {showPasswordModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[110] backdrop-blur-sm p-4">
+          <div className="bg-white p-6 rounded-xl w-full max-w-sm">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-bold">Actualizar Contraseña</h3>
+              <button onClick={() => setShowPasswordModal(false)}><X className="text-gray-400" /></button>
+            </div>
+            <p className="text-xs text-gray-500 mb-4 italic">Ingresa tu nueva contraseña para acceder a Fluxo con seguridad.</p>
+            <form onSubmit={handlePasswordUpdate} className="space-y-4">
+              <input
+                type="password"
+                className="w-full p-3 border rounded-lg"
+                placeholder="Nueva Contraseña (mín 6 car.)"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                required
+                minLength={6}
+              />
+              <button
+                type="submit"
+                disabled={isProcessing}
+                className="w-full py-4 bg-orange-600 text-white font-bold rounded-xl uppercase text-sm shadow-lg hover:bg-orange-700 transition-all disabled:opacity-50"
+              >
+                {isProcessing ? 'Actualizando...' : 'Confirmar Cambio'}
+              </button>
+            </form>
           </div>
         </div>
       )}

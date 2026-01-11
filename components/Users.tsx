@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { createClient } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
 import {
@@ -31,10 +32,14 @@ export default function Users() {
 
     // DATOS DEL USUARIO ACTUAL
     const [currentUserProfile, setCurrentUserProfile] = useState<any>(null);
+    const [isSuperAdminFallback, setIsSuperAdminFallback] = useState(false);
 
     // --- ESTADOS DE MODALES ---
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showResetModal, setShowResetModal] = useState(false);
+    const [resetTarget, setResetTarget] = useState<{ id: string, name: string } | null>(null);
+    const [newPassword, setNewPassword] = useState('');
 
     // --- DATOS FORMULARIOS (UNIFICADO) ---
     const [formData, setFormData] = useState({
@@ -93,10 +98,10 @@ export default function Users() {
 
         setCurrentUserProfile(profile);
 
-        // 3. CHECK SUPER ADMIN (Desde DB + Fallback Email)
-        const isSuperAdminFallback = profile.role === 'super_admin' || email === 'diazmartinnicolas@gmail.com';
+        const isSuperAdmin = profile.role === 'super_admin' || email === 'diazmartinnicolas@gmail.com';
+        setIsSuperAdminFallback(isSuperAdmin);
 
-        if (isSuperAdminFallback) {
+        if (isSuperAdmin) {
             console.log("Modo: Super Admin (Companies)");
             setViewMode('companies');
             setFormData(prev => ({ ...prev, typeOrRole: 'pizzeria' }));
@@ -166,20 +171,49 @@ export default function Users() {
         }
     };
 
+    const handleAdminResetPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!resetTarget || newPassword.length < 6) {
+            return toast.error("La contraseña debe tener al menos 6 caracteres.");
+        }
+
+        setIsProcessing(true);
+        try {
+            const { data, error } = await supabase.functions.invoke('admin-auth', {
+                body: {
+                    target_user_id: resetTarget.id,
+                    new_password: newPassword
+                }
+            });
+
+            if (error) throw error;
+
+            toast.success(`✅ Contraseña para "${resetTarget.name}" actualizada con éxito.`);
+            setShowResetModal(false);
+            setNewPassword('');
+            setResetTarget(null);
+        } catch (error: any) {
+            console.error("Error resetting password:", error);
+            toast.error("Error al resetear contraseña: " + (error.message || "Error desconocido"));
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
     // --- CREACIÓN (Dual Logic) ---
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
 
         // DEMO
         if (items === DEMO_STAFF) {
-            alert("(Demo) Ítem creado en memoria.");
+            toast.info("(Demo) Ítem creado en memoria.");
             setShowCreateModal(false);
             return;
         }
 
         const validation = UserSchema.safeParse(formData);
         if (!validation.success) {
-            return alert("⚠️ " + validation.error.issues[0].message);
+            return toast.warning("⚠️ " + validation.error.issues[0].message);
         }
 
         setIsProcessing(true);
@@ -209,7 +243,7 @@ export default function Users() {
                     }
                 });
                 if (authError) throw authError;
-                alert(`✅ Empresa "${formData.name}" creada.`);
+                toast.success(`✅ Empresa "${formData.name}" creada.`);
                 await fetchCompanies();
 
             } else {
@@ -229,7 +263,7 @@ export default function Users() {
                     }
                 });
                 if (authError) throw authError;
-                alert(`✅ Empleado "${formData.name}" registrado.`);
+                toast.success(`✅ Empleado "${formData.name}" registrado.`);
                 await fetchRealStaff(myCompanyId);
             }
 
@@ -255,7 +289,7 @@ export default function Users() {
 
         const validation = UserEditSchema.safeParse(editData);
         if (!validation.success) {
-            return alert("⚠️ " + validation.error.issues[0].message);
+            return toast.warning("⚠️ " + validation.error.issues[0].message);
         }
 
         setIsProcessing(true);
@@ -290,10 +324,10 @@ export default function Users() {
                     await fetchRealStaff(currentUserProfile.company_id);
                 }
             }
-            alert("✅ Actualizado.");
+            toast.success("✅ Actualizado.");
             setShowEditModal(false);
         } catch (error: any) {
-            alert("Error: " + error.message);
+            toast.error("Error: " + error.message);
         } finally {
             setIsProcessing(false);
         }
@@ -332,14 +366,14 @@ export default function Users() {
                 if (currentUserProfile) await fetchRealStaff(currentUserProfile.company_id);
             }
         } catch (error: any) {
-            alert("Error al borrar: " + error.message);
+            toast.error("Error al borrar: " + error.message);
         }
     };
 
     // --- PREPARAR MODAL DE EDICIÓN ---
     const openEditModal = (item: any) => {
         if (items === DEMO_STAFF) {
-            alert("Edición simulada en modo Demo.");
+            toast.info("Edición simulada en modo Demo.");
             return;
         }
 
@@ -464,6 +498,9 @@ export default function Users() {
 
                                     <td className="p-4 text-right">
                                         <div className="flex justify-end gap-2">
+                                            {isSuperAdminFallback && (
+                                                <button onClick={() => { setResetTarget({ id: item.id, name: item.name }); setShowResetModal(true); }} className="p-2 text-orange-600 hover:bg-orange-50 rounded-full transition-colors" title="Blanquear Contraseña"><Lock size={18} /></button>
+                                            )}
                                             <button onClick={() => openEditModal(item)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors" title="Editar"><Pencil size={18} /></button>
                                             <button onClick={() => handleDelete(item.id, item.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors" title="Eliminar"><Trash2 size={18} /></button>
                                         </div>
