@@ -9,6 +9,9 @@ import {
 import { getBirthdayLink } from '../utils/whatsapp';
 import { CustomerSchema } from '../schemas/customers';
 import { z } from 'zod';
+import { TableRowSkeleton } from './ui/Skeleton';
+import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Customers() {
   const [clients, setClients] = useState<any[]>([]);
@@ -84,7 +87,7 @@ export default function Customers() {
   const handleSave = async () => {
     const validation = CustomerSchema.safeParse(formData);
     if (!validation.success) {
-      return alert("⚠️ " + validation.error.issues[0].message);
+      return toast.error("⚠️ " + validation.error.issues[0].message);
     }
 
     try {
@@ -96,15 +99,17 @@ export default function Customers() {
       if (editingClient) {
         const { error } = await supabase.from('clients').update(payload).eq('id', editingClient.id);
         if (error) throw error;
+        toast.success("Cliente actualizado");
       } else {
         const { error } = await supabase.from('clients').insert([{ ...payload, user_id: user.id }]);
         if (error) throw error;
+        toast.success("Cliente registrado con éxito");
       }
 
       fetchClients();
       setIsModalOpen(false);
     } catch (error: any) {
-      alert("Error: " + error.message);
+      toast.error("Error: " + error.message);
     }
   };
 
@@ -270,40 +275,56 @@ export default function Customers() {
         <table className="w-full text-left">
           <thead className="bg-gray-50 text-gray-500 font-bold text-xs uppercase tracking-wider sticky top-0 z-10">
             <tr>
-              <th className="p-4 border-b pl-6">Nombre</th>
+              <th className="p-4 border-b">Cliente</th>
               <th className="p-4 border-b">Dirección</th>
               <th className="p-4 border-b">Teléfono</th>
-              <th className="p-4 border-b">Cumpleaños</th>
-              <th className="p-4 border-b text-right pr-6">Acciones</th>
+              <th className="p-4 border-b text-center">Cumpleaños</th>
+              <th className="p-4 border-b text-right">Acciones</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={5} className="p-8 text-center text-gray-400">Cargando...</td></tr>
+              <>
+                <TableRowSkeleton cols={5} />
+                <TableRowSkeleton cols={5} />
+                <TableRowSkeleton cols={5} />
+                <TableRowSkeleton cols={5} />
+                <TableRowSkeleton cols={5} />
+              </>
             ) : filteredClients.length === 0 ? (
-              <tr><td colSpan={5} className="p-8 text-center text-gray-400">No se encontraron clientes.</td></tr>
+              <tr><td colSpan={5} className="p-8 text-center text-gray-400">Sin clientes registrados.</td></tr>
             ) : (
-              filteredClients.map(client => (
-                <tr key={client.id} className="hover:bg-gray-50 transition-colors group">
-                  <td className="p-4 pl-6 font-bold text-gray-800">{client.name}</td>
-                  <td className="p-4 text-gray-600 text-sm">{client.address || '-'}</td>
-                  <td className="p-4 text-gray-600 text-sm">{client.phone || '-'}</td>
-                  <td className="p-4 text-gray-600">
-                    {client.birth_date ? (
-                      <span className="flex items-center gap-2 text-sm">
-                        <CalendarHeart size={14} className="text-pink-400" />
-                        {client.birth_date.split('-')[2]}/{client.birth_date.split('-')[1]}
-                      </span>
-                    ) : <span className="text-gray-300">-</span>}
-                  </td>
-                  <td className="p-4 text-right pr-6">
-                    <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handleOpenEdit(client)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={18} /></button>
-                      <button onClick={() => handleDelete(client.id, client.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              <AnimatePresence mode="popLayout">
+                {filteredClients.map((client) => (
+                  <motion.tr
+                    key={client.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="hover:bg-gray-50 transition-colors group"
+                  >
+                    <td className="p-4">
+                      <div className="font-bold text-gray-800">{client.name}</div>
+                      <div className="text-xs text-gray-400">ID: {client.id.slice(0, 8)}</div>
+                    </td>
+                    <td className="p-4 text-sm text-gray-600">{client.address || <span className="text-gray-300 italic">No cargada</span>}</td>
+                    <td className="p-4 text-sm font-medium text-gray-700">{client.phone || <span className="text-gray-300 italic">Sin teléfono</span>}</td>
+                    <td className="p-4 text-center">
+                      {client.birth_date ? (
+                        <span className="px-2 py-1 bg-pink-50 text-pink-600 rounded-lg text-xs font-bold border border-pink-100 flex items-center justify-center gap-1 mx-auto w-fit">
+                          <CalendarHeart size={12} /> {new Date(client.birth_date + 'T00:00:00').toLocaleDateString('es-AR', { day: 'numeric', month: 'short' })}
+                        </span>
+                      ) : '-'}
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleOpenEdit(client)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg" title="Editar"><Edit size={18} /></button>
+                        <button onClick={() => handleDelete(client.id, client.name)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg" title="Eliminar"><Trash2 size={18} /></button>
+                      </div>
+                    </td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
             )}
           </tbody>
         </table>

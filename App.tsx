@@ -11,6 +11,8 @@ import History from './components/History';
 import Reservations from './components/Reservations';
 import Reports from './components/Reports';
 import { calculateHalfHalfPrice } from './utils/pricing';
+import { Toaster, toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 
 // Iconos
 import {
@@ -54,6 +56,18 @@ function App() {
   const [firstHalf, setFirstHalf] = useState<any>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Atajos de teclado
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F1') { e.preventDefault(); setActiveTab('pos'); }
+      if (e.key === 'F2') { e.preventDefault(); setActiveTab('kitchen'); }
+      if (e.key === 'F3') { e.preventDefault(); setActiveTab('customers'); }
+      if (e.key === 'F4') { e.preventDefault(); setActiveTab('reservations'); }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   const searchContainerRef = useRef<HTMLDivElement>(null);
 
   // Derivados de permisos
@@ -88,6 +102,17 @@ function App() {
     const roles: any = { super_admin: 'CEO', admin: 'Administrador', cashier: 'Cajero', cocina: 'Cocina' };
     const label = roles[userProfile?.role || ''] || 'Usuario';
     return isSuperAdmin ? label : `${label} (${companyName})`;
+  };
+
+  const handleToggleFavorite = async (productId: string) => {
+    // Optimístico: Ya está manejado en AppContext pero podemos agregar un feedback visual aquí si quisiéramos
+    try {
+      const product = products.find(p => p.id === productId);
+      if (!product) return;
+      await toggleFavorite(productId, product.is_favorite);
+    } catch (error: any) {
+      toast.error("Error al marcar favorito");
+    }
   };
 
   const addToCart = (product: any) => {
@@ -169,8 +194,9 @@ function App() {
         price_at_moment: item.price
       })));
       setCart([]); setSelectedCustomerId(''); setClientSearchTerm(''); setMobileView('products');
+      toast.success("¡Pedido enviado con éxito!");
     } catch (err: any) {
-      alert("Error al procesar pedido: " + err.message);
+      toast.error("Error al procesar pedido: " + err.message);
     } finally {
       setIsProcessing(false);
     }
@@ -190,8 +216,9 @@ function App() {
       setClientSearchTerm(data.name);
       setShowQuickCustomer(false);
       setNewClientData({ name: '', address: '', phone: '' });
+      toast.success(`Cliente ${data.name} registrado`);
     } catch (error: any) {
-      alert("Error creando cliente: " + error.message);
+      toast.error("Error creando cliente: " + error.message);
     }
   };
 
@@ -212,6 +239,7 @@ function App() {
 
   return (
     <div className="flex h-dvh bg-gray-50 font-sans text-gray-800 overflow-hidden">
+      <Toaster position="top-right" richColors />
       {/* SIDEBAR */}
       <aside className="w-64 bg-white border-r border-gray-200 flex-col justify-between hidden md:flex z-50">
         <div>
@@ -226,9 +254,10 @@ function App() {
             </div>
           </div>
           <nav className="px-3 space-y-1">
-            <SidebarItem icon={<ShoppingCart size={20} />} label="Ventas" active={activeTab === 'pos'} onClick={() => setActiveTab('pos')} />
-            <SidebarItem icon={<ChefHat size={20} />} label="Cocina" active={activeTab === 'kitchen'} onClick={() => setActiveTab('kitchen')} />
-            <SidebarItem icon={<UsersIcon size={20} />} label="Clientes" active={activeTab === 'customers'} onClick={() => setActiveTab('customers')} />
+            <SidebarItem icon={<ShoppingCart size={20} />} label="Ventas" active={activeTab === 'pos'} onClick={() => setActiveTab('pos')} shortcut="F1" />
+            <SidebarItem icon={<ChefHat size={20} />} label="Cocina" active={activeTab === 'kitchen'} onClick={() => setActiveTab('kitchen')} shortcut="F2" />
+            <SidebarItem icon={<UsersIcon size={20} />} label="Clientes" active={activeTab === 'customers'} onClick={() => setActiveTab('customers')} shortcut="F3" />
+            <SidebarItem icon={<CalendarClock size={20} />} label="Reservas" active={activeTab === 'reservations'} onClick={() => setActiveTab('reservations')} shortcut="F4" />
             {isAdmin && (
               <>
                 <div className="h-px bg-gray-100 my-4"></div>
@@ -317,13 +346,30 @@ function App() {
           </div>
         )}
 
-        <div className="flex-1 overflow-auto">
-          {activeTab === 'kitchen' && <Kitchen demoOrders={demoOrders} onDemoComplete={id => setDemoOrders(prev => prev.filter(o => o.id !== id))} companyName={companyName} />}
-          {activeTab === 'customers' && <Customers />}
-          {activeTab === 'inventory' && <Inventory />}
-          {activeTab === 'history' && <History />}
-          {activeTab === 'reports' && <Reports />}
-          {(activeTab === 'users' || activeTab === 'clients') && <Users />}
+        <div className="flex-1 overflow-auto relative">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.2 }}
+              className="h-full"
+            >
+              {activeTab === 'pos' && (
+                <div className="h-full flex flex-col md:flex-row overflow-hidden pt-16 md:pt-0">
+                  {/* POS UI... actual content already exists between 252-323 approximately */}
+                </div>
+              )}
+              {activeTab === 'kitchen' && <Kitchen demoOrders={demoOrders} onDemoComplete={id => setDemoOrders(prev => prev.filter(o => o.id !== id))} companyName={companyName} />}
+              {activeTab === 'customers' && <Customers />}
+              {activeTab === 'reservations' && <Reservations />}
+              {activeTab === 'inventory' && <Inventory />}
+              {activeTab === 'history' && <History />}
+              {activeTab === 'reports' && <Reports />}
+              {(activeTab === 'users' || activeTab === 'clients') && <Users />}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </main>
 
@@ -346,11 +392,14 @@ function App() {
   );
 }
 
-function SidebarItem({ icon, label, active, onClick }: any) {
+function SidebarItem({ icon, label, active, onClick, shortcut }: any) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all font-medium text-sm ${active ? 'bg-orange-50 text-orange-600 ring-1 ring-orange-100 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}>
-      <span className={active ? 'text-orange-600' : 'text-gray-400'}>{icon}</span>
-      <span>{label}</span>
+    <button onClick={onClick} className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg transition-all font-medium text-sm ${active ? 'bg-orange-50 text-orange-600 ring-1 ring-orange-100 shadow-sm' : 'text-gray-600 hover:bg-gray-50'}`}>
+      <div className="flex items-center gap-3">
+        <span className={active ? 'text-orange-600' : 'text-gray-400'}>{icon}</span>
+        <span>{label}</span>
+      </div>
+      {shortcut && <span className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded text-gray-400 border border-gray-200 group-hover:bg-white">{shortcut}</span>}
     </button>
   );
 }

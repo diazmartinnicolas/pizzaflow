@@ -7,6 +7,9 @@ import {
 import { getReservationLink } from '../utils/whatsapp';
 import { ReservationSchema } from '../schemas/reservations';
 import { z } from 'zod';
+import { TableRowSkeleton } from './ui/Skeleton';
+import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Reservations() {
   const [reservations, setReservations] = useState<any[]>([]);
@@ -51,7 +54,7 @@ export default function Reservations() {
   const handleSave = async () => {
     const validation = ReservationSchema.safeParse(formData);
     if (!validation.success) {
-      return alert("⚠️ " + validation.error.issues[0].message);
+      return toast.error("⚠️ " + validation.error.issues[0].message);
     }
 
     try {
@@ -70,9 +73,9 @@ export default function Reservations() {
         .single();
 
       if (error) throw error;
-
       setReservations(prev => [...prev, data]);
       setIsModalOpen(false);
+      toast.success("Reserva guardada con éxito");
 
       setFormData({
         client_name: '',
@@ -84,7 +87,7 @@ export default function Reservations() {
       });
 
     } catch (error: any) {
-      alert("Error guardando: " + error.message);
+      toast.error("Error guardando: " + error.message);
     }
   };
 
@@ -100,14 +103,15 @@ export default function Reservations() {
         .eq('id', id);
 
       if (error) throw error;
+      toast.success("Reserva eliminada");
     } catch (error: any) {
-      alert("Error borrando: " + error.message);
+      toast.error("Error borrando: " + error.message);
       fetchReservations();
     }
   };
 
   const handleConfirmWhatsApp = (reservation: any) => {
-    if (!reservation.phone) return alert("No hay teléfono cargado.");
+    if (!reservation.phone) return toast.error("No hay teléfono cargado.");
 
     const link = getReservationLink({
       customerName: reservation.client_name || 'Cliente',
@@ -122,7 +126,9 @@ export default function Reservations() {
 
   const handleMarkReady = async (id: string) => {
     setReservations(prev => prev.map(r => r.id === id ? { ...r, status: 'confirmada' } : r));
-    await supabase.from('reservations').update({ status: 'confirmada' }).eq('id', id);
+    const { error } = await supabase.from('reservations').update({ status: 'confirmada' }).eq('id', id);
+    if (error) toast.error("Error al confirmar: " + error.message);
+    else toast.success("Reserva confirmada");
   };
 
   const filtered = reservations.filter(r => {
@@ -175,54 +181,70 @@ export default function Reservations() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filtered.length === 0 ? (
+            {loading ? (
+              <>
+                <TableRowSkeleton cols={5} />
+                <TableRowSkeleton cols={5} />
+                <TableRowSkeleton cols={5} />
+                <TableRowSkeleton cols={5} />
+                <TableRowSkeleton cols={5} />
+              </>
+            ) : filtered.length === 0 ? (
               <tr><td colSpan={5} className="p-8 text-center text-gray-400">Sin reservas.</td></tr>
             ) : (
-              filtered.map(res => (
-                <tr key={res.id} className="hover:bg-gray-50 transition-colors group">
-                  <td className="p-4">
-                    <div className="font-bold text-gray-800">{res.client_name || 'Sin Nombre'}</div>
-                    {res.phone && <div className="text-xs text-gray-400 flex items-center gap-1"><Phone size={10} /> {res.phone}</div>}
-                    {res.notes && <div className="text-xs text-orange-500 italic mt-1">"{res.notes}"</div>}
-                  </td>
-                  <td className="p-4">
-                    {/* 👇 USAMOS LA FUNCIÓN SEGURA AQUÍ */}
-                    <div className="text-sm font-medium">{formatDateSafe(res.date)}</div>
-                    <div className="text-xs text-gray-500">{res.time} hs</div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Users size={16} /> {res.pax}
-                    </div>
-                  </td>
-                  <td className="p-4 text-center">
-                    <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${res.status === 'confirmada' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
-                      {res.status || 'Pendiente'}
-                    </span>
-                  </td>
-                  <td className="p-4 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleConfirmWhatsApp(res)}
-                        className="p-2 bg-green-50 text-green-600 hover:bg-green-600 hover:text-white rounded-lg transition-colors border border-green-200"
-                        title="Confirmar por WhatsApp"
-                      >
-                        <MessageCircle size={18} />
-                      </button>
-
-                      {res.status !== 'confirmada' && (
-                        <button onClick={() => handleMarkReady(res.id)} className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg">
-                          <Check size={18} />
+              <AnimatePresence mode="popLayout">
+                {filtered.map(res => (
+                  <motion.tr
+                    key={res.id}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="hover:bg-gray-50 transition-colors group"
+                  >
+                    <td className="p-4">
+                      <div className="font-bold text-gray-800">{res.client_name || 'Sin Nombre'}</div>
+                      {res.phone && <div className="text-xs text-gray-400 flex items-center gap-1"><Phone size={10} /> {res.phone}</div>}
+                      {res.notes && <div className="text-xs text-orange-500 italic mt-1">"{res.notes}"</div>}
+                    </td>
+                    <td className="p-4">
+                      {/* 👇 USAMOS LA FUNCIÓN SEGURA AQUÍ */}
+                      <div className="text-sm font-medium">{formatDateSafe(res.date)}</div>
+                      <div className="text-xs text-gray-500">{res.time} hs</div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <Users size={16} /> {res.pax}
+                      </div>
+                    </td>
+                    <td className="p-4 text-center">
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold uppercase ${res.status === 'confirmada' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
+                        {res.status || 'Pendiente'}
+                      </span>
+                    </td>
+                    <td className="p-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => handleConfirmWhatsApp(res)}
+                          className="p-2 bg-green-50 text-green-600 hover:bg-green-600 hover:text-white rounded-lg transition-colors border border-green-200"
+                          title="Confirmar por WhatsApp"
+                        >
+                          <MessageCircle size={18} />
                         </button>
-                      )}
 
-                      <button onClick={() => handleDelete(res.id)} className="p-2 text-red-300 hover:text-red-600 hover:bg-red-50 rounded-lg">
-                        <Trash2 size={18} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                        {res.status !== 'confirmada' && (
+                          <button onClick={() => handleMarkReady(res.id)} className="p-2 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-lg">
+                            <Check size={18} />
+                          </button>
+                        )}
+
+                        <button onClick={() => handleDelete(res.id)} className="p-2 text-red-300 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                          <Trash2 size={18} />
+                        </button>
+                      </div>
+                    </td>
+                  </motion.tr>
+                ))}
+              </AnimatePresence>
             )}
           </tbody>
         </table>
