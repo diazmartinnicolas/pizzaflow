@@ -408,8 +408,36 @@ function App() {
                   </div>
                 ))}
               </div>
-              <div className="p-6 border-t bg-gray-50">
-                <div className="flex justify-between mb-4 text-xl font-bold"><span>Total</span><span className="text-orange-600">$ {finalTotal.toLocaleString()}</span></div>
+              <div className="p-6 border-t bg-gray-50 flex flex-col gap-4">
+                {/* BOTONES DE PAGO */}
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={() => setPaymentType('efectivo')}
+                    className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${paymentType === 'efectivo' ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                      }`}
+                  >
+                    <Banknote size={20} />
+                    <span className="text-[10px] font-bold mt-1 uppercase">Efectivo</span>
+                  </button>
+                  <button
+                    onClick={() => setPaymentType('transferencia')}
+                    className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${paymentType === 'transferencia' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                      }`}
+                  >
+                    <QrCode size={20} />
+                    <span className="text-[10px] font-bold mt-1 uppercase">Transf.</span>
+                  </button>
+                  <button
+                    onClick={() => setPaymentType('tarjeta')}
+                    className={`flex flex-col items-center justify-center p-2 rounded-lg border transition-all ${paymentType === 'tarjeta' ? 'bg-purple-600 text-white border-purple-600' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
+                      }`}
+                  >
+                    <CreditCard size={20} />
+                    <span className="text-[10px] font-bold mt-1 uppercase">Tarjeta</span>
+                  </button>
+                </div>
+
+                <div className="flex justify-between text-xl font-bold"><span>Total</span><span className="text-orange-600">$ {finalTotal.toLocaleString()}</span></div>
                 <button onClick={handleCheckout} disabled={!selectedCustomerId || cart.length === 0 || isProcessing} className="w-full bg-gray-900 text-white font-bold py-4 rounded-xl shadow-lg disabled:opacity-50 transition-all hover:bg-orange-600">{isProcessing ? 'Procesando...' : 'Confirmar Pedido'}</button>
                 {mobileView === 'cart' && <button onClick={() => setMobileView('products')} className="w-full mt-3 py-2 text-gray-500 font-medium">Volver a productos</button>}
               </div>
