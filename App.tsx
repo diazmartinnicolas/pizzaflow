@@ -34,7 +34,7 @@ const clientSchema = z.object({
 function App() {
   const {
     session, userProfile, loading, products, customers, promotions,
-    signOut, createOrder, createCustomer, toggleFavorite
+    signOut, createOrder, createCustomer, toggleFavorite, refreshData
   } = useApp();
 
   // Navegación
@@ -278,6 +278,7 @@ function App() {
   if (!session) return <Login />;
 
   const filteredProducts = products
+    .filter(p => p.active) // Solo productos activos
     .filter(p => selectedCategory === 'Todo' || (selectedCategory === 'Mitades' ? (p.category === 'Mitades' || p.name.toLowerCase().includes('mitad')) : p.category === selectedCategory))
     .sort((a, b) => (b.is_favorite ? 1 : 0) - (a.is_favorite ? 1 : 0));
 
@@ -463,7 +464,7 @@ function App() {
               {activeTab === 'kitchen' && <Kitchen demoOrders={demoOrders} onDemoComplete={id => setDemoOrders(prev => prev.filter(o => o.id !== id))} companyName={companyName} />}
               {activeTab === 'customers' && <Customers />}
               {activeTab === 'reservations' && <Reservations />}
-              {activeTab === 'inventory' && <Inventory />}
+              {activeTab === 'inventory' && <Inventory onProductUpdate={refreshData} />}
               {activeTab === 'history' && <History />}
               {activeTab === 'reports' && <Reports />}
               {(activeTab === 'users' || activeTab === 'clients') && <Users />}

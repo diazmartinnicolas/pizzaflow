@@ -74,7 +74,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const refreshData = async () => {
     try {
       const [prodRes, promoRes, clientRes, orderRes] = await Promise.all([
-        supabase.from('products').select('*').order('name'),
+        supabase.from('products').select('*').is('deleted_at', null).order('name'),
         supabase.from('promotions').select('*').is('deleted_at', null),
         supabase.from('clients').select('*').eq('is_active', true).order('name'),
         supabase.from('orders').select('*, clients(name)').order('created_at', { ascending: false }).limit(50)
