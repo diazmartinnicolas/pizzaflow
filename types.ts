@@ -49,7 +49,8 @@ export interface Promotion {
   type: string;
   discount_percentage: number;
   product_1_id: string;
-  product_2_id?: string;
+  product_2_id?: string | null;
+  fixed_price?: number | null;
   is_active: boolean;
 }
 

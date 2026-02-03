@@ -201,18 +201,40 @@ const POS: React.FC<POSProps> = ({ isDemo = false, onDemoOrder }) => {
 
     // Modo producción
     try {
+      // Preparar los items del carrito para guardar en BD
+      const orderItems = groupedCart.map((item: any) => {
+        let productId = item.id;
+        let itemName = item.name; // Guardar el nombre original del item (promo o producto)
+        let itemDescription = item.description || ''; // Descripción con productos incluidos
+
+        // Si es un combo de mitades, usar un producto de pizzas como referencia
+        if (item.id.toString().startsWith('combo-')) {
+          productId = products.find(p => p.category === 'Pizzas')?.id || products[0]?.id;
+        }
+        // Si es una promoción, buscar la promo original y usar su product_1_id
+        else if (item.id.toString().startsWith('promo-')) {
+          // Extraer el ID de la promoción del formato "promo-{promoId}-{timestamp}"
+          const promoIdParts = item.id.toString().split('-');
+          const promoId = promoIdParts.slice(1, -1).join('-'); // Remover "promo-" y el timestamp
+          const originalPromo = promotions.find(p => p.id === promoId);
+          productId = originalPromo?.product_1_id || products[0]?.id;
+        }
+
+        return {
+          product_id: productId,
+          quantity: item.quantity,
+          price_at_moment: item.price,
+          item_name: itemName,
+          notes: itemDescription
+        };
+      });
+
       await createOrder({
         client_id: customerSelector.selectedCustomerId,
         total: totals.finalTotal,
         payment_type: paymentMethod,
         user_id: session.user.id
-      }, groupedCart.map((item: any) => ({
-        product_id: item.id.toString().startsWith('combo-')
-          ? (products.find(p => p.category === 'Pizzas')?.id || products[0]?.id)
-          : item.id,
-        quantity: item.quantity,
-        price_at_moment: item.price
-      })));
+      }, orderItems);
 
       clearCart();
       customerSelector.clearSelection();
@@ -227,7 +249,7 @@ const POS: React.FC<POSProps> = ({ isDemo = false, onDemoOrder }) => {
   }, [
     cart, customerSelector, isDemo, onDemoOrder,
     createOrder, totals, paymentMethod, session,
-    groupedCart, products, clearCart, resetCheckout, setIsProcessing
+    groupedCart, products, promotions, clearCart, resetCheckout, setIsProcessing
   ]);
 
   const handleQuickCustomerCreate = useCallback(async () => {
@@ -318,20 +340,98 @@ const POS: React.FC<POSProps> = ({ isDemo = false, onDemoOrder }) => {
             />
           ))}
 
-          {/* Promociones */}
-          {selectedCategory === 'Promociones' && promotions.map(promo => (
-            <div
-              key={promo.id}
-              className="bg-purple-50 rounded-xl p-3 border border-purple-100"
-            >
-              <h3 className="font-bold text-purple-900 text-sm flex items-center gap-2">
-                <Tag size={16} /> {promo.name}
-              </h3>
-              <span className="text-[10px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded font-bold">
-                {promo.discount_percentage}% OFF
-              </span>
-            </div>
-          ))}
+          {/* Promociones - Ahora clickeables */}
+          {selectedCategory === 'Promociones' && promotions.map(promo => {
+            // Obtener los productos de la promoción
+            const product1 = products.find(p => p.id === promo.product_1_id);
+            const product2 = products.find(p => p.id === promo.product_2_id);
+
+            // Calcular precios
+            const price1 = product1?.price || 0;
+            const price2 = product2?.price || 0;
+
+            let regularPrice = 0;
+            let finalPrice = 0;
+
+            if (promo.type === '2x1') {
+              regularPrice = price1 * 2;
+              finalPrice = price1;
+            } else if (promo.type === 'fixed' && promo.fixed_price) {
+              regularPrice = price1 + price2;
+              finalPrice = promo.fixed_price;
+            } else {
+              regularPrice = price1 + price2;
+              finalPrice = regularPrice - (regularPrice * (promo.discount_percentage / 100));
+            }
+
+            // Handler para agregar la promoción al carrito
+            const handleAddPromoToCart = () => {
+              // Crear un producto virtual que representa la promoción
+              const promoProduct: Product = {
+                id: `promo-${promo.id}-${Date.now()}`,
+                name: promo.name,
+                price: Math.round(finalPrice),
+                category: 'Promociones',
+                active: true,
+                description: `${product1?.name || ''}${product2 ? ` + ${product2.name}` : promo.type === '2x1' ? ' (x2)' : ''}`
+              };
+              addToCart(promoProduct);
+            };
+
+            return (
+              <div
+                key={promo.id}
+                onClick={handleAddPromoToCart}
+                className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-4 border-2 border-purple-100 hover:border-purple-300 hover:shadow-lg transition-all cursor-pointer group active:scale-95"
+              >
+                {/* Badge de tipo */}
+                <div className="flex items-center justify-between mb-2">
+                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${promo.type === 'fixed' ? 'bg-orange-100 text-orange-700' :
+                    promo.type === '2x1' ? 'bg-indigo-100 text-indigo-700' :
+                      'bg-blue-100 text-blue-700'
+                    }`}>
+                    {promo.type === 'fixed' ? 'Combo' : promo.type === '2x1' ? '2x1' : `${promo.discount_percentage}% OFF`}
+                  </span>
+                  <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                    -${Math.round(regularPrice - finalPrice).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Nombre */}
+                <h3 className="font-bold text-purple-900 text-sm flex items-center gap-2 mb-2">
+                  <Tag size={14} className="text-purple-500" /> {promo.name}
+                </h3>
+
+                {/* Productos incluidos */}
+                <div className="text-[11px] text-gray-600 space-y-0.5 mb-3">
+                  {product1 && (
+                    <p className="truncate">• {product1.name}</p>
+                  )}
+                  {product2 && (
+                    <p className="truncate">• {product2.name}</p>
+                  )}
+                  {promo.type === '2x1' && !product2 && (
+                    <p className="text-indigo-600 italic">• (x2 del mismo)</p>
+                  )}
+                </div>
+
+                {/* Precios */}
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-bold text-purple-700">
+                    ${Math.round(finalPrice).toLocaleString()}
+                  </span>
+                  <span className="text-xs text-gray-400 line-through">
+                    ${regularPrice.toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Indicador de agregar */}
+                <div className="mt-2 text-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <span className="text-xs text-purple-600 font-medium">Click para agregar →</span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

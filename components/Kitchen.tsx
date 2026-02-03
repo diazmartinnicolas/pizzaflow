@@ -77,15 +77,27 @@ const KitchenTicket = forwardRef<HTMLDivElement, { order: any; companyName?: str
       {/* ITEMS (ORDENADOS) */}
       <div className="border-b border-black border-dashed py-2 mb-4">
         <ul className="space-y-3">
-          {sortedItems.map((item: any, index: number) => (
-            <li key={index} className="flex gap-2 items-start">
-              <span className="font-black text-lg w-6 text-right leading-none">{item.quantity}</span>
-              <span className="mx-1 pt-1">x</span>
-              <span className="flex-1 text-lg font-bold uppercase leading-none pt-0.5">
-                {item.product?.name || 'Item'}
-              </span>
-            </li>
-          ))}
+          {sortedItems.map((item: any, index: number) => {
+            const displayName = item.item_name || item.product?.name || 'Item';
+            const notes = item.notes || '';
+
+            return (
+              <li key={index} className="flex flex-col gap-0.5">
+                <div className="flex gap-2 items-start">
+                  <span className="font-black text-lg w-6 text-right leading-none">{item.quantity}</span>
+                  <span className="mx-1 pt-1">x</span>
+                  <span className="flex-1 text-lg font-bold uppercase leading-none pt-0.5">
+                    {displayName}
+                  </span>
+                </div>
+                {notes && (
+                  <span className="text-xs text-gray-600 ml-10 italic">
+                    ({notes})
+                  </span>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </div>
 
@@ -134,6 +146,8 @@ export default function Kitchen({ demoOrders = [], onDemoComplete, companyName }
             client:clients(name, phone, address),
             order_items (
                 quantity,
+                item_name,
+                notes,
                 product:products(name, category)
             )
         `)
@@ -256,16 +270,32 @@ export default function Kitchen({ demoOrders = [], onDemoComplete, companyName }
                 {/* Items */}
                 <div className="p-4 flex-1 text-gray-700">
                   <ul className="space-y-3">
-                    {order.order_items?.map((item: any, index: number) => (
-                      <li key={index} className={`flex gap-3 text-sm border-b border-dashed pb-2 last:border-0 last:pb-0 ${isDemo ? 'border-orange-200' : 'border-gray-100'}`}>
-                        <span className={`font-bold w-6 h-6 flex items-center justify-center rounded-full text-xs flex-shrink-0 ${isDemo ? 'bg-orange-200 text-orange-800' : 'bg-gray-100 text-gray-800'}`}>
-                          {item.quantity}
-                        </span>
-                        <span className="leading-tight pt-0.5">
-                          {item.product?.name || 'Producto desconocido'}
-                        </span>
-                      </li>
-                    ))}
+                    {order.order_items?.map((item: any, index: number) => {
+                      // Priorizar item_name (nombre personalizado/promoción) sobre product.name
+                      const displayName = item.item_name || item.product?.name || 'Item';
+                      const notes = item.notes || '';
+
+                      return (
+                        <li key={index} className={`border-b border-dashed pb-2 last:border-0 last:pb-0 ${isDemo ? 'border-orange-200' : 'border-gray-100'}`}>
+                          <div className="flex gap-3 text-sm">
+                            <span className={`font-bold w-6 h-6 flex items-center justify-center rounded-full text-xs flex-shrink-0 ${isDemo ? 'bg-orange-200 text-orange-800' : 'bg-gray-100 text-gray-800'}`}>
+                              {item.quantity}
+                            </span>
+                            <div className="flex-1">
+                              <span className="leading-tight font-medium block">
+                                {displayName}
+                              </span>
+                              {/* Mostrar productos incluidos si es una promoción */}
+                              {notes && (
+                                <span className="text-[10px] text-gray-400 block mt-0.5">
+                                  ({notes})
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
 

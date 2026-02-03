@@ -4,13 +4,21 @@ import { logAction } from '../services/audit';
 import {
     Percent, Plus, Trash2, Tag, Lock, Store,
     Flame, Gift, ArrowLeft, Calculator, ShoppingBag,
-    ArrowRight, CheckCircle2
+    ArrowRight, CheckCircle2, Pencil, Package
 } from 'lucide-react';
 import { PromotionSchema } from '../schemas/promotions';
 import { z } from 'zod';
 
 // Tipos para manejar el estado local
 type PromoType = 'percent' | 'fixed' | '2x1';
+
+interface PromoFormData {
+    id?: string;
+    name: string;
+    product_1_id: string;
+    product_2_id: string;
+    value: number;
+}
 
 export default function Promotions() {
     // Estado de Datos
@@ -20,15 +28,16 @@ export default function Promotions() {
     const [isDemo, setIsDemo] = useState(false);
 
     // Estado de UI
-    const [view, setView] = useState<'list' | 'create'>('list');
+    const [view, setView] = useState<'list' | 'create' | 'edit'>('list');
+    const [editingPromoId, setEditingPromoId] = useState<string | null>(null);
 
     // Estado del Constructor de Ofertas
     const [dealType, setDealType] = useState<PromoType>('percent');
-    const [formData, setFormData] = useState({
+    const [formData, setFormData] = useState<PromoFormData>({
         name: '',
         product_1_id: '',
         product_2_id: '',
-        value: 0, // Puede ser Porcentaje o Precio Fijo según el tipo
+        value: 0,
     });
 
     useEffect(() => {
@@ -40,32 +49,44 @@ export default function Promotions() {
         const email = user?.email || '';
 
         // Cargar productos para el select (Solo activos)
-        // Usamos el filtro 'active' para que no aparezcan productos deshabilitados en el selector
-        const { data: prodData } = await supabase.from('products').select('*').eq('active', true);
+        const { data: prodData } = await supabase.from('products').select('*').eq('active', true).is('deleted_at', null);
         if (prodData) setProducts(prodData);
 
         // MODO DEMO
         if (email.toLowerCase().includes('demo')) {
             setIsDemo(true);
+            const demoProducts = prodData || [];
             setPromotions([
-                { id: '1', name: 'Martes de Locos (Demo)', discount_percentage: 20, type: 'percent' },
-                { id: '2', name: 'Combo Burger (Demo)', discount_percentage: 15, type: 'fixed', fixed_price: 12000 },
-                { id: '3', name: '2x1 Cervezas (Demo)', discount_percentage: 50, type: '2x1' }
+                { id: '1', name: 'Martes de Locos (Demo)', discount_percentage: 20, type: 'percent', product_1_id: demoProducts[0]?.id, product_2_id: null },
+                { id: '2', name: 'Combo Burger (Demo)', discount_percentage: 15, type: 'fixed', fixed_price: 12000, product_1_id: demoProducts[1]?.id, product_2_id: demoProducts[2]?.id },
+                { id: '3', name: '2x1 Cervezas (Demo)', discount_percentage: 50, type: '2x1', product_1_id: demoProducts[3]?.id, product_2_id: null }
             ]);
             setLoading(false);
             return;
         }
 
-        // MODO REAL - CORREGIDO
-        // Agregamos .is('deleted_at', null) para filtrar las borradas lógicamente
+        // MODO REAL
         const { data } = await supabase
             .from('promotions')
             .select('*')
-            .is('deleted_at', null) // <--- FILTRO DE SOFT DELETE AÑADIDO
+            .is('deleted_at', null)
             .order('created_at', { ascending: false });
 
         if (data) setPromotions(data);
         setLoading(false);
+    };
+
+    // --- Obtener nombre de producto por ID ---
+    const getProductName = (productId: string | null | undefined) => {
+        if (!productId) return null;
+        const product = products.find(p => p.id === productId);
+        return product?.name || 'Producto no encontrado';
+    };
+
+    const getProductPrice = (productId: string | null | undefined) => {
+        if (!productId) return 0;
+        const product = products.find(p => p.id === productId);
+        return product?.price || 0;
     };
 
     // --- CÁLCULOS EN TIEMPO REAL ---
@@ -112,7 +133,21 @@ export default function Promotions() {
     const handleCreateClick = () => {
         setFormData({ name: '', product_1_id: '', product_2_id: '', value: 0 });
         setDealType('percent');
+        setEditingPromoId(null);
         setView('create');
+    };
+
+    const handleEditClick = (promo: any) => {
+        setFormData({
+            id: promo.id,
+            name: promo.name,
+            product_1_id: promo.product_1_id || '',
+            product_2_id: promo.product_2_id || '',
+            value: promo.type === 'fixed' ? (promo.fixed_price || 0) : (promo.discount_percentage || 0),
+        });
+        setDealType(promo.type || 'percent');
+        setEditingPromoId(promo.id);
+        setView('edit');
     };
 
     const handleSavePromo = async () => {
@@ -128,32 +163,55 @@ export default function Promotions() {
             product_2_id: formData.product_2_id || null,
             type: dealType,
             discount_percentage: Math.round(previewData?.calculatedPercent || 0),
-            fixed_price: dealType === 'fixed' ? formData.value : null
+            fixed_price: dealType === 'fixed' ? formData.value : null,
+            is_active: true
         };
 
         // LOGICA DEMO
         if (isDemo) {
-            const fakePromo = { id: Date.now(), ...payload };
-            setPromotions([fakePromo, ...promotions]);
-            logAction('CREAR_PROMO', `(Simulado) ${formData.name}`, 'Promociones');
+            if (editingPromoId) {
+                setPromotions(promotions.map(p => p.id === editingPromoId ? { ...p, ...payload } : p));
+                logAction('EDITAR_PROMO', `(Simulado) ${formData.name}`, 'Promociones');
+                alert("Promoción editada en MEMORIA (Modo Demo)");
+            } else {
+                const fakePromo = { id: Date.now().toString(), ...payload };
+                setPromotions([fakePromo, ...promotions]);
+                logAction('CREAR_PROMO', `(Simulado) ${formData.name}`, 'Promociones');
+                alert("Promoción creada en MEMORIA (Modo Demo)");
+            }
             setView('list');
-            alert("Promoción creada en MEMORIA (Modo Demo)");
             return;
         }
 
         // LOGICA REAL
-        const { error } = await supabase.from('promotions').insert([payload]);
+        if (editingPromoId) {
+            // Editar promoción existente
+            const { error } = await supabase
+                .from('promotions')
+                .update(payload)
+                .eq('id', editingPromoId);
 
-        if (error) {
-            alert("Error: " + error.message);
+            if (error) {
+                alert("Error: " + error.message);
+            } else {
+                await logAction('EDITAR_PROMO', `Editada: ${formData.name}`, 'Promociones');
+                fetchData();
+                setView('list');
+            }
         } else {
-            await logAction('CREAR_PROMO', `Nueva: ${formData.name}`, 'Promociones');
-            fetchData();
-            setView('list');
+            // Crear nueva promoción
+            const { error } = await supabase.from('promotions').insert([payload]);
+
+            if (error) {
+                alert("Error: " + error.message);
+            } else {
+                await logAction('CREAR_PROMO', `Nueva: ${formData.name}`, 'Promociones');
+                fetchData();
+                setView('list');
+            }
         }
     };
 
-    // --- REFACTORIZADO A SOFT DELETE (CORREGIDO) ---
     const handleDeletePromo = async (id: any, name: string) => {
         if (!confirm("¿Eliminar esta promoción?")) return;
 
@@ -162,21 +220,45 @@ export default function Promotions() {
             return;
         }
 
-        // 1. Ejecutar UPDATE en BD
         const { error } = await supabase
             .from('promotions')
-            .update({ deleted_at: new Date().toISOString() }) // <--- SOFT DELETE
+            .update({ deleted_at: new Date().toISOString() })
             .eq('id', id);
 
         if (error) {
             alert("Error: " + error.message);
         } else {
             logAction('ELIMINAR_PROMO', `Borrada (Soft): ${name}`, 'Promociones');
-
-            // 2. Actualizar ESTADO LOCAL VISUALMENTE
-            // Esto elimina el parpadeo de recarga y hace que la UI responda rápido
             setPromotions(prevPromos => prevPromos.filter(p => p.id !== id));
         }
+    };
+
+    // Calcular el precio de venta de la promoción
+    const getPromoFinalPrice = (promo: any) => {
+        if (promo.type === 'fixed' && promo.fixed_price) {
+            return promo.fixed_price;
+        }
+
+        const price1 = getProductPrice(promo.product_1_id);
+        const price2 = getProductPrice(promo.product_2_id);
+
+        if (promo.type === '2x1') {
+            return price1; // Paga 1, lleva 2
+        }
+
+        const regularPrice = price1 + price2;
+        return regularPrice - (regularPrice * (promo.discount_percentage / 100));
+    };
+
+    const getPromoRegularPrice = (promo: any) => {
+        const price1 = getProductPrice(promo.product_1_id);
+        const price2 = getProductPrice(promo.product_2_id);
+
+        if (promo.type === '2x1') {
+            return price1 * 2;
+        }
+
+        return price1 + price2;
     };
 
     // --- RENDERIZADO ---
@@ -189,17 +271,17 @@ export default function Promotions() {
     );
 
     return (
-        <div className="p-4 md:p-8 max-w-7xl mx-auto">
+        <div className="p-4 md:p-8 max-w-7xl mx-auto overflow-y-auto h-full">
 
             {/* HEADER */}
             <div className="flex justify-between items-center mb-8">
                 <div>
                     <h2 className="text-3xl font-bold text-gray-800 flex items-center gap-2">
                         <Tag className="text-purple-600" size={32} />
-                        {view === 'list' ? 'Gestor de Promociones' : 'Constructor de Ofertas'}
+                        {view === 'list' ? 'Gestor de Promociones' : view === 'edit' ? 'Editar Promoción' : 'Constructor de Ofertas'}
                     </h2>
                     <p className="text-gray-500 mt-1 text-sm">
-                        {view === 'list' ? 'Administra tus campañas activas.' : 'Configura una nueva estrategia de venta.'}
+                        {view === 'list' ? 'Administra tus campañas activas.' : 'Configura tu estrategia de venta.'}
                     </p>
                 </div>
 
@@ -234,40 +316,110 @@ export default function Promotions() {
                     {promotions.map(promo => (
                         <div key={promo.id} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow group relative">
                             <div className={`h-2 w-full ${promo.type === 'fixed' ? 'bg-orange-500' :
-                                    promo.type === '2x1' ? 'bg-indigo-500' : 'bg-blue-500'
+                                promo.type === '2x1' ? 'bg-indigo-500' : 'bg-blue-500'
                                 }`}></div>
 
                             <div className="p-6">
-                                <div className="flex justify-between items-start mb-4">
+                                {/* Header con tipo y acciones */}
+                                <div className="flex justify-between items-start mb-3">
                                     <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${promo.type === 'fixed' ? 'bg-orange-100 text-orange-700' :
-                                            promo.type === '2x1' ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'
+                                        promo.type === '2x1' ? 'bg-indigo-100 text-indigo-700' : 'bg-blue-100 text-blue-700'
                                         }`}>
                                         {promo.type === 'fixed' ? 'Combo Precio Fijo' : promo.type === '2x1' ? 'Promo 2x1' : 'Descuento %'}
                                     </span>
-                                    <button onClick={() => handleDeletePromo(promo.id, promo.name)} className="text-gray-300 hover:text-red-500 transition-colors p-1">
-                                        <Trash2 size={18} />
-                                    </button>
-                                </div>
-
-                                <h3 className="font-bold text-xl text-gray-800 mb-1">{promo.name}</h3>
-
-                                <div className="flex items-center gap-2 mt-4 text-sm text-gray-600">
-                                    <CheckCircle2 size={16} className="text-green-500" />
-                                    <span>{promo.discount_percentage}% OFF Calculado</span>
-                                </div>
-                                {promo.fixed_price && (
-                                    <div className="mt-2 text-lg font-bold text-gray-900">
-                                        $ {promo.fixed_price.toLocaleString()} <span className="text-xs font-normal text-gray-400 line-through">Precio Lista</span>
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={() => handleEditClick(promo)}
+                                            className="text-gray-300 hover:text-blue-500 transition-colors p-1"
+                                            title="Editar"
+                                        >
+                                            <Pencil size={16} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeletePromo(promo.id, promo.name)}
+                                            className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                                            title="Eliminar"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
                                     </div>
-                                )}
+                                </div>
+
+                                {/* Nombre de la promoción */}
+                                <h3 className="font-bold text-xl text-gray-800 mb-3">{promo.name}</h3>
+
+                                {/* Productos incluidos */}
+                                <div className="bg-gray-50 rounded-lg p-3 mb-3 space-y-2">
+                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                                        <Package size={12} /> Productos incluidos
+                                    </p>
+                                    <div className="space-y-1">
+                                        {promo.product_1_id && (
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <span className="w-5 h-5 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-[10px] font-bold">1</span>
+                                                <span className="text-gray-700 font-medium truncate flex-1">
+                                                    {getProductName(promo.product_1_id)}
+                                                </span>
+                                                <span className="text-gray-400 text-xs">
+                                                    ${getProductPrice(promo.product_1_id).toLocaleString()}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {promo.product_2_id && (
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <span className="w-5 h-5 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-[10px] font-bold">2</span>
+                                                <span className="text-gray-700 font-medium truncate flex-1">
+                                                    {getProductName(promo.product_2_id)}
+                                                </span>
+                                                <span className="text-gray-400 text-xs">
+                                                    ${getProductPrice(promo.product_2_id).toLocaleString()}
+                                                </span>
+                                            </div>
+                                        )}
+                                        {promo.type === '2x1' && !promo.product_2_id && (
+                                            <div className="flex items-center gap-2 text-sm">
+                                                <span className="w-5 h-5 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-[10px] font-bold">2</span>
+                                                <span className="text-indigo-600 font-medium italic">
+                                                    (Mismo producto gratis)
+                                                </span>
+                                            </div>
+                                        )}
+                                        {!promo.product_1_id && (
+                                            <p className="text-gray-400 text-sm italic">Sin productos asignados</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Descuento y precio */}
+                                <div className="flex items-center gap-2 text-sm text-gray-600">
+                                    <CheckCircle2 size={16} className="text-green-500" />
+                                    <span>{promo.discount_percentage}% OFF</span>
+                                </div>
+
+                                {/* Precios */}
+                                <div className="mt-3 pt-3 border-t border-gray-100">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <span className="text-gray-400 text-xs line-through block">
+                                                ${getPromoRegularPrice(promo).toLocaleString()}
+                                            </span>
+                                            <span className="text-2xl font-bold text-gray-900">
+                                                ${Math.round(getPromoFinalPrice(promo)).toLocaleString()}
+                                            </span>
+                                        </div>
+                                        <div className="bg-green-100 text-green-700 px-2 py-1 rounded-lg text-xs font-bold">
+                                            Ahorrás ${Math.round(getPromoRegularPrice(promo) - getPromoFinalPrice(promo)).toLocaleString()}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     ))}
                 </div>
             )}
 
-            {/* VISTA: CONSTRUCTOR (BUILDER) */}
-            {view === 'create' && (
+            {/* VISTA: CONSTRUCTOR (BUILDER) / EDICIÓN */}
+            {(view === 'create' || view === 'edit') && (
                 <div className="flex flex-col lg:flex-row gap-8 animate-in slide-in-from-right-4 duration-500">
 
                     {/* IZQUIERDA: CONFIGURACIÓN */}
@@ -339,7 +491,7 @@ export default function Promotions() {
                                                 onChange={e => setFormData({ ...formData, product_1_id: e.target.value })}
                                             >
                                                 <option value="">Seleccionar...</option>
-                                                {products.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price})</option>)}
+                                                {products.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price.toLocaleString()})</option>)}
                                             </select>
                                             <ShoppingBag className="absolute left-3 top-3.5 text-gray-400" size={18} />
                                         </div>
@@ -355,7 +507,7 @@ export default function Promotions() {
                                                     onChange={e => setFormData({ ...formData, product_2_id: e.target.value })}
                                                 >
                                                     <option value="">Ninguno</option>
-                                                    {products.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price})</option>)}
+                                                    {products.map(p => <option key={p.id} value={p.id}>{p.name} (${p.price.toLocaleString()})</option>)}
                                                 </select>
                                                 <Plus className="absolute left-3 top-3.5 text-gray-400" size={18} />
                                             </div>
@@ -446,12 +598,15 @@ export default function Promotions() {
                                         )}
 
                                         <div className="pt-4 border-t border-gray-700">
-                                            <p className="text-xs text-gray-500 mb-2">Detalle interno del ticket:</p>
+                                            <p className="text-xs text-gray-500 mb-2">Productos incluidos:</p>
                                             <ul className="text-xs space-y-1 text-gray-300">
-                                                <li>• {formData.name || 'Nueva Promo'}</li>
-                                                <li>• Tipo: <span className="uppercase">{dealType}</span></li>
-                                                <li>• Descuento real: {Math.round(previewData.calculatedPercent)}%</li>
+                                                {previewData.p1 && <li>• {previewData.p1.name}</li>}
+                                                {previewData.p2 && <li>• {previewData.p2.name}</li>}
+                                                {dealType === '2x1' && <li className="text-indigo-400">• (x2 del mismo producto)</li>}
                                             </ul>
+                                            <p className="text-xs text-gray-500 mt-3">
+                                                Descuento real: <span className="text-purple-400 font-bold">{Math.round(previewData.calculatedPercent)}%</span>
+                                            </p>
                                         </div>
                                     </div>
                                 ) : (
@@ -466,7 +621,7 @@ export default function Promotions() {
                                 disabled={!formData.name || !formData.product_1_id}
                                 className="w-full mt-4 bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 group"
                             >
-                                <span>Confirmar y Guardar</span>
+                                <span>{view === 'edit' ? 'Guardar Cambios' : 'Confirmar y Guardar'}</span>
                                 <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
                             </button>
                         </div>

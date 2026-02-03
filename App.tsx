@@ -32,7 +32,7 @@ import { Button } from './components/atoms/Button';
 import {
   ShoppingCart, ChefHat, Users as UsersIcon, Package,
   History as HistoryIcon, UserCog, LogOut, CalendarClock, Menu,
-  Crown, BarChart3, Briefcase, Lock, Building2, Flame, X
+  Crown, BarChart3, Briefcase, Lock, Building2, Flame, X, Tag
 } from 'lucide-react';
 
 // ============================================================
@@ -256,6 +256,7 @@ function App() {
                     onClick={() => setActiveTab('users')}
                   />
                   <SidebarItem icon={<Package size={20} />} label="Inventario" active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} />
+                  <SidebarItem icon={<Tag size={20} />} label="Promociones" active={activeTab === 'promotions'} onClick={() => setActiveTab('promotions')} />
                   <SidebarItem icon={<HistoryIcon size={20} />} label="Historial" active={activeTab === 'history'} onClick={() => setActiveTab('history')} />
                   <SidebarItem icon={<BarChart3 size={20} />} label="Reportes" active={activeTab === 'reports'} onClick={() => setActiveTab('reports')} />
                 </>
@@ -326,6 +327,7 @@ function App() {
               {activeTab === 'inventory' && <Inventory onProductUpdate={refreshData} />}
               {activeTab === 'history' && <History />}
               {activeTab === 'reports' && <Reports />}
+              {activeTab === 'promotions' && <Promotions />}
               {activeTab === 'users' && <Users />}
             </motion.div>
           </AnimatePresence>
