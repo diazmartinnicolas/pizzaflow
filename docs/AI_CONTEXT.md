@@ -13,13 +13,13 @@ El objetivo es agilizar la toma de pedidos, gestionar el inventario y controlar 
 ## 3. Lógica de Negocio Crítica (Donde enfocar los tests)
 
 ### A. Precios de Pizzas (Mitad y Mitad)
-- Archivo: `src/utils/pricing.ts`
+- Archivo: `utils/pricing.ts`
 - Regla: Si se combinan dos mitades, se cobra el precio de la mitad más cara.
 - Validaciones: No permite precios negativos.
 
 ### B. Inventario y Productos
-- Archivo: `src/components/Inventory.tsx`
-- Validaciones (Zod): `src/schemas/products.ts`
+- Archivo: `components/Inventory.tsx`
+- Validaciones (Zod): `schemas/products.ts`
     - Precios no pueden ser negativos.
     - Categorías deben ser de la lista permitida.
     - Nombres min 3 caracteres.

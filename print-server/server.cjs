@@ -49,10 +49,10 @@ const server = http.createServer((req, res) => {
 });
 
 /**
- * Formato completo - 24 chars por linea
+ * Genera el texto del ticket con formato ASCII - Ancho ajustado para 58mm
  */
 function generateTicket(order) {
-    const W = 24;
+    const W = 28; // Aumentamos un poco el ancho para mejor legibilidad
     const lines = [];
 
     const center = (t) => {
@@ -64,7 +64,6 @@ function generateTicket(order) {
     const sep = '='.repeat(W);
     const dash = '-'.repeat(W);
 
-    // Partir texto largo en lineas
     const wrap = (text) => {
         const result = [];
         let remaining = String(text);
@@ -76,10 +75,9 @@ function generateTicket(order) {
     };
 
     // Header
-    lines.push('');
     lines.push(center(order.companyName || 'FLUXO'));
-    const fecha = new Date().toLocaleDateString();
-    const hora = new Date().toLocaleTimeString().substring(0, 5);
+    const fecha = new Date().toLocaleDateString('es-AR');
+    const hora = new Date().toLocaleTimeString('es-AR').substring(0, 5);
     lines.push(center(fecha + ' - ' + hora));
     lines.push(sep);
 
@@ -87,67 +85,57 @@ function generateTicket(order) {
     lines.push('TICKET: #' + order.ticket_number);
     lines.push(dash);
 
-    // Tipo y pago en recuadro simple
-    let tipo = 'LOCAL';
-    if (order.order_type === 'delivery') {
-        tipo = 'DELIVERY';
-    } else if (order.order_type === 'takeaway') {
-        tipo = 'TAKE AWAY';
-    } else if (order.order_type === 'local' || order.table) {
-        tipo = 'MESA';
-    }
-    const pago = (order.payment_type || 'EFECTIVO').toUpperCase();
-    lines.push('[' + tipo + '] [' + pago + ']');
+    // Tipo y pago
+    let tipo = (order.order_type || 'LOCAL').toUpperCase();
+    if (tipo === 'DELIVERY') tipo = '[DELIVERY]';
+    else if (tipo === 'TAKEAWAY') tipo = '[P/LLEVAR]';
+    else tipo = '[MESA]';
+
+    const pago = '[' + (order.payment_type || 'EFECTIVO').toUpperCase() + ']';
+
+    lines.push(tipo + ' ' + pago);
     lines.push(sep);
 
-    // Si es pedido de mesa, mostrar nombre de la mesa
-    if (order.order_type === 'local' && order.table) {
-        lines.push('MESA:');
-        lines.push((order.table.name || 'Mesa ' + order.table.id).toUpperCase());
+    // Si es mesa
+    if (order.table) {
+        lines.push('MESA: ' + (order.table.name || order.table.id).toUpperCase());
         lines.push(dash);
     }
 
-    // Cliente y dirección
+    // Cliente / Dirección
     lines.push('CLIENTE / DIRECCION:');
-    const cliente = order.client?.name || 'Mostrador';
-    lines.push(cliente.toUpperCase());
+    lines.push((order.client?.name || 'Mostrador').toUpperCase());
 
-    // Dirección (del delivery o del cliente)
     const direccion = order.delivery_address || order.client?.address;
     if (direccion) {
-        lines.push(...wrap(direccion));
+        lines.push(...wrap(direccion.toUpperCase()));
     }
 
-    // Teléfono
     const telefono = order.delivery_phone || order.client?.phone;
     if (telefono) {
         lines.push('TELEFONO:');
         lines.push(telefono);
     }
-
     lines.push(sep);
 
     // Productos
     lines.push('');
     (order.order_items || []).forEach(item => {
-        // Nombre completo del producto
-        const name = (item.item_name || item.product?.name || 'Item').toUpperCase();
         const qty = item.quantity || 1;
+        const name = (item.item_name || item.product?.name || 'Item').toUpperCase();
 
-        // Si el nombre es largo, dividirlo
-        const productLine = qty + ' x ' + name;
-        lines.push(...wrap(productLine));
+        // Formato "1 x NOMBRE"
+        lines.push(`${qty} x ${name}`);
 
-        // Notas/gustos
         if (item.notes) {
-            lines.push('  (' + item.notes + ')');
+            lines.push(...wrap('  (' + item.notes + ')').map(l => '  ' + l.trim()));
         }
     });
 
     lines.push('');
     lines.push(sep);
 
-    // Total: siempre visible en todos los tickets
+    // Total
     if (order.total) {
         lines.push('');
         lines.push('TOTAL: $' + Number(order.total).toLocaleString('es-AR'));
@@ -155,10 +143,9 @@ function generateTicket(order) {
         lines.push(sep);
     }
 
-    // Observaciones con recuadro
+    // Observaciones
     lines.push('OBSERVACIONES:');
     lines.push('+' + '-'.repeat(W - 2) + '+');
-    lines.push('|' + ' '.repeat(W - 2) + '|');
     lines.push('|' + ' '.repeat(W - 2) + '|');
     lines.push('|' + ' '.repeat(W - 2) + '|');
     lines.push('+' + '-'.repeat(W - 2) + '+');
@@ -167,26 +154,42 @@ function generateTicket(order) {
     // Footer
     lines.push('');
     lines.push(center('*** FIN DE ORDEN ***'));
-    lines.push('');
-    lines.push('');
-    lines.push('');
+    lines.push('\r\n\r\n\r\n'); // Espacio para el corte
 
     return lines.join('\r\n');
 }
 
+/**
+ * Imprime el ticket usando PowerShell (Sin depender de Notepad)
+ * Esto garantiza márgenes cero y fuente fija en cualquier PC.
+ */
 function printTicket(order, callback) {
-    const content = generateTicket(order);
-    const tempFile = path.join(__dirname, 'ticket.txt');
+    try {
+        const content = generateTicket(order);
+        const tempFile = path.join(__dirname, 'ticket.txt');
 
-    fs.writeFile(tempFile, content, 'utf8', (err) => {
-        if (err) return callback(err);
+        fs.writeFileSync(tempFile, content, 'utf8');
 
-        exec(`notepad /p "${tempFile}"`, (error) => {
-            setTimeout(() => fs.unlink(tempFile, () => { }), 2000);
-            console.log('Ticket #' + order.ticket_number + ' OK');
+        // Comando PowerShell "mágico" para imprimir texto con fuente fija y márgenes cero
+        const psCommand = `powershell -NoProfile -Command "$content = Get-Content -Path '${tempFile}' -Raw; $p = New-Object System.Drawing.Printing.PrintDocument; $p.DocumentName = 'Ticket Fluxo #${order.ticket_number}'; $p.DefaultPageSettings.Margins = New-Object System.Drawing.Printing.Margins(0,0,0,0); $p.add_PrintPage({ $_.Graphics.DrawString($content, (New-Object System.Drawing.Font('Consolas', 9)), [System.Drawing.Brushes]::Black, 0, 0) }); $p.Print()"`;
+
+        exec(psCommand, (error) => {
+            // Limpieza
+            setTimeout(() => { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); }, 2000);
+
+            if (error) {
+                console.error('Error PowerShell:', error);
+                // Si falla el método pro, intentamos el básico de notepad como último recurso
+                exec(`notepad /p "${tempFile}"`, () => { });
+            }
+
+            console.log('Ticket #' + order.ticket_number + ' Enviado');
             callback(null);
         });
-    });
+    } catch (err) {
+        console.error('Error general de impresión:', err);
+        callback(err);
+    }
 }
 
 server.listen(PORT, () => {

@@ -81,73 +81,91 @@ const KitchenTicket = React.forwardRef<HTMLDivElement, { order: any; companyName
   });
 
   return (
-    <div ref={ref} className="hidden print:block p-1 bg-white text-black font-mono text-[10px] w-[58mm] mx-auto leading-tight">
+    <div ref={ref} className="hidden print:block p-2 bg-white text-black font-mono text-[12px] w-[58mm] mx-auto leading-normal">
       <style>{`
         @page { 
           margin: 0; 
           size: 58mm auto;
         }
         @media print {
-          body { margin: 0; padding: 0; }
-          header, footer, .no-print { display: none !important; }
+          body { 
+            margin: 0; 
+            padding: 0;
+            -webkit-print-color-adjust: exact;
+          }
+          .ticket-dashed {
+            border-bottom: 1px dashed black;
+          }
         }
       `}</style>
-      <div className="text-center mb-4 border-b border-black pb-2 border-dashed">
-        <h2 className="font-black text-lg uppercase leading-none mb-1">
-          {companyName || 'FLUXO KITCHEN'}
+
+      {/* Header */}
+      <div className="text-center mb-2">
+        <h2 className="font-bold text-base uppercase leading-tight">
+          {companyName || 'FLUXO'}
         </h2>
         <p className="text-[10px]">
-          {new Date().toLocaleDateString()} - {new Date().toLocaleTimeString()}
+          {new Date().toLocaleDateString('es-AR')} - {new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
         </p>
       </div>
 
-      <div className="mb-4 border-b border-black border-dashed pb-2">
-        <div className="flex justify-between items-end font-bold text-base mb-1">
-          <span>TICKET:</span>
-          <span>#{order.ticket_number}</span>
-        </div>
+      <div className="border-b-[1px] border-black border-double mb-2"></div>
 
-        <div className="text-right mb-3 flex justify-between items-center">
-          {order.order_type && (
-            <span className="text-sm font-black border-2 border-black px-2 py-0.5 rounded-sm uppercase">
-              {order.order_type === 'delivery' ? '🛵 DELIVERY' : order.order_type === 'takeaway' ? '🏃 P/LLEVAR' : '🍽️ MESA'}
-            </span>
-          )}
-          <span className="text-sm font-black border-2 border-black px-2 py-0.5 rounded-sm uppercase">
-            PAGO: {paymentMethod}
-          </span>
-        </div>
-
-        <div className="text-sm font-bold uppercase space-y-2">
-          <div>
-            <span className="text-xs font-normal block mb-0.5">Cliente / Dirección:</span>
-            <span className="text-base block">{order.client?.name || 'Mostrador'}</span>
-            {order.order_type === 'delivery' && order.delivery_address ? (
-              <span className="text-sm block font-medium mt-0.5">📍 {order.delivery_address}</span>
-            ) : (
-              <span className="text-sm block font-medium mt-0.5">{order.client?.address || 'Retira en local'}</span>
-            )}
-          </div>
-          <div>
-            <span className="text-xs font-normal block mb-0.5">Teléfono:</span>
-            <span>{order.delivery_phone || order.client?.phone || 'Sin teléfono'}</span>
-          </div>
-        </div>
+      {/* Ticket Number */}
+      <div className="flex justify-between font-bold text-sm mb-1 uppercase">
+        <span>TICKET:</span>
+        <span>#{order.ticket_number}</span>
       </div>
 
-      <div className="border-b border-black border-dashed py-2 mb-4">
-        <ul className="space-y-3">
+      <div className="border-b border-black border-dashed mb-1"></div>
+
+      {/* Type & Payment Info */}
+      <div className="mb-1 text-sm font-bold uppercase">
+        {order.order_type === 'delivery' ? '[DELIVERY]' : order.order_type === 'takeaway' ? '[P/LLEVAR]' : '[MESA]'}
+        {' '}[{paymentMethod}]
+      </div>
+
+      <div className="border-b-[1px] border-black border-double mb-2"></div>
+
+      {/* Table info */}
+      {order.table && (
+        <div className="mb-2">
+          <p className="font-bold uppercase">MESA: {order.table.name || order.table.id}</p>
+          <div className="border-b border-black border-dashed mt-1"></div>
+        </div>
+      )}
+
+      {/* Cliente / Dirección */}
+      <div className="text-xs uppercase mb-2">
+        <p className="font-bold">CLIENTE / DIRECCION:</p>
+        <p className="text-sm font-black">{order.client?.name || 'Mostrador'}</p>
+        {order.delivery_address && (
+          <p className="text-xs mt-0.5 font-bold leading-tight">📍 {order.delivery_address}</p>
+        )}
+        {(order.delivery_phone || order.client?.phone) && (
+          <div className="mt-1">
+            <p className="font-bold">TELEFONO:</p>
+            <p className="text-sm">{order.delivery_phone || order.client?.phone}</p>
+          </div>
+        )}
+      </div>
+
+      <div className="border-b-[1px] border-black border-double mb-2"></div>
+
+      {/* Items */}
+      <div className="mb-2">
+        <ul className="space-y-2">
           {sortedItems.map((item: any, index: number) => (
-            <li key={index} className="flex flex-col gap-0.5">
+            <li key={index} className="flex flex-col">
               <div className="flex gap-1 items-start">
-                <span className="font-black text-base w-4 text-right leading-none">{item.quantity}</span>
-                <span className="mx-0.5 pt-0.5">x</span>
-                <span className="flex-1 text-base font-bold uppercase leading-none pt-0.5">
+                <span className="font-black text-sm">{item.quantity}</span>
+                <span className="mx-0.5">x</span>
+                <span className="flex-1 text-sm font-black uppercase">
                   {item.item_name || item.product?.name}
                 </span>
               </div>
               {item.notes && (
-                <span className="text-[10px] text-gray-600 ml-5 italic block leading-tight">
+                <span className="text-[10px] ml-6 italic block">
                   ({item.notes})
                 </span>
               )}
@@ -156,12 +174,27 @@ const KitchenTicket = React.forwardRef<HTMLDivElement, { order: any; companyName
         </ul>
       </div>
 
-      <div className="mb-4">
-        <p className="text-xs font-bold mb-1">OBSERVACIONES:</p>
-        <div className="w-full h-24 border-2 border-black border-dashed rounded-md"></div>
+      <div className="border-b-[1px] border-black border-double mb-2 mt-2"></div>
+
+      {/* Total */}
+      <div className="flex justify-between items-center py-1 font-black text-base">
+        <span>TOTAL:</span>
+        <span>${Number(order.total || 0).toLocaleString('es-AR')}</span>
       </div>
 
-      <div className="text-center text-xs font-bold mt-2">
+      <div className="border-b-[1px] border-black border-double mb-3"></div>
+
+      {/* Observaciones */}
+      <div className="mb-4">
+        <p className="text-[10px] font-bold mb-1">OBSERVACIONES:</p>
+        <div className="w-full h-16 border border-black border-dashed rounded flex items-center justify-center">
+          {/* Espacio para escribir a mano */}
+        </div>
+      </div>
+
+      <div className="border-b border-black border-dashed mb-2"></div>
+
+      <div className="text-center font-bold text-[10px] mt-2 pb-8">
         <p>*** FIN DE ORDEN ***</p>
       </div>
     </div>
@@ -869,10 +902,10 @@ const POS: React.FC<POSProps> = ({ isDemo = false, onDemoOrder, initialTable, on
         )}
 
         {/* Footer: Pago y Total */}
-        <div className="p-6 border-t border-gray-100 bg-gray-50 space-y-4">
+        <div className="p-3 border-t border-gray-100 bg-gray-50 space-y-3">
           {/* Selector de tipo de pedido */}
           <div>
-            <p className="text-xs font-bold text-gray-600 mb-2">Tipo de Pedido</p>
+            <p className="text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Tipo de Pedido</p>
             <OrderTypeSelector
               selected={orderType}
               onChange={(type) => {
@@ -890,7 +923,7 @@ const POS: React.FC<POSProps> = ({ isDemo = false, onDemoOrder, initialTable, on
           {/* Selector de Mesa (solo visible si es tipo local/mesa) */}
           {orderType === 'local' && (
             <div>
-              <p className="text-xs font-bold text-gray-600 mb-2">Seleccionar Mesa</p>
+              <p className="text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Seleccionar Mesa</p>
               <TableSelector
                 selectedTable={selectedTable}
                 onSelectTable={setSelectedTable}
@@ -950,7 +983,7 @@ const POS: React.FC<POSProps> = ({ isDemo = false, onDemoOrder, initialTable, on
           {/* Botón Confirmar e Imprimir */}
           <Button
             variant="primary"
-            size="lg"
+            size="md"
             fullWidth
             isLoading={isProcessing}
             disabled={
@@ -958,9 +991,9 @@ const POS: React.FC<POSProps> = ({ isDemo = false, onDemoOrder, initialTable, on
               (orderType === 'delivery' && !deliveryInfo.address)
             }
             onClick={() => handleCheckout(true)}
-            className="flex items-center justify-center gap-2"
+            className="flex items-center justify-center gap-2 py-2.5 h-auto text-sm"
           >
-            <Printer size={20} />
+            <Printer size={16} />
             {isProcessing ? 'Procesando...' : 'Confirmar Pedido'}
           </Button>
 

@@ -64,16 +64,16 @@ export const PaymentMethodSelector: React.FC<PaymentMethodSelectorProps> = ({
                         role="radio"
                         aria-checked={isSelected}
                         className={`
-              flex flex-col items-center justify-center 
-              p-2 rounded-lg border transition-all
+              flex flex-row items-center justify-center gap-1.5
+              p-1.5 rounded-lg border transition-all
               ${isSelected
                                 ? option.activeColor
                                 : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50'
                             }
             `}
                     >
-                        {option.icon}
-                        <span className="text-[10px] font-bold mt-1 uppercase">
+                        <span className="scale-90">{option.icon}</span>
+                        <span className="text-[9px] font-bold uppercase">
                             {option.label}
                         </span>
                     </button>

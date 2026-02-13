@@ -61,7 +61,7 @@ export const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
     onChange
 }) => {
     return (
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
             {ORDER_TYPES.map((type) => {
                 const isSelected = selected === type.value;
                 return (
@@ -69,18 +69,18 @@ export const OrderTypeSelector: React.FC<OrderTypeSelectorProps> = ({
                         key={type.value}
                         onClick={() => onChange(type.value)}
                         className={`
-                            flex-1 flex flex-col items-center justify-center
-                            py-2 px-3 rounded-lg border-2 transition-all
+                            flex-1 flex flex-row items-center justify-center gap-1.5
+                            py-1.5 px-2 rounded-lg border-2 transition-all
                             ${isSelected
                                 ? `${type.bgColor} ${type.borderColor} ${type.color}`
                                 : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'
                             }
                         `}
                     >
-                        <span className={isSelected ? type.color : 'text-gray-400'}>
+                        <span className={isSelected ? type.color : 'text-gray-400 scale-90'}>
                             {type.icon}
                         </span>
-                        <span className={`text-xs font-bold mt-1 ${isSelected ? type.color : 'text-gray-500'}`}>
+                        <span className={`text-[10px] font-bold ${isSelected ? type.color : 'text-gray-500'}`}>
                             {type.label}
                         </span>
                     </button>

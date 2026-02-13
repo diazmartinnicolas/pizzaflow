@@ -55,11 +55,16 @@ export const TableSelector: React.FC<TableSelectorProps> = ({
             const { data, error } = await supabase
                 .from('tables')
                 .select('id, name, capacity, status')
-                .eq('company_id', companyId)
-                .order('name');
+                .eq('company_id', companyId);
 
             if (error) throw error;
-            setTables(data || []);
+
+            // Ordenamiento NUMÉRICO natural (Mesa 1, Mesa 2, Mesa 10...)
+            const sortedData = (data || []).sort((a, b) =>
+                a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' })
+            );
+
+            setTables(sortedData);
         } catch (err) {
             // Datos demo si no existe la tabla
             setTables([
@@ -121,18 +126,19 @@ export const TableSelector: React.FC<TableSelectorProps> = ({
             <AnimatePresence>
                 {showDropdown && (
                     <motion.div
-                        initial={{ opacity: 0, y: -10 }}
+                        initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -10 }}
-                        className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 z-50 overflow-hidden"
+                        exit={{ opacity: 0, y: 10 }}
+                        className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-xl shadow-2xl border border-gray-200 z-[100] overflow-hidden"
                     >
-                        <div className="p-2 border-b border-gray-100 bg-gray-50">
-                            <p className="text-xs text-gray-500 font-medium">
+                        <div className="p-2 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                            <p className="text-xs text-gray-500 font-bold uppercase tracking-tight">
                                 {availableTables.length} mesas disponibles
                             </p>
+                            <LayoutGrid size={14} className="text-gray-400" />
                         </div>
 
-                        <div className="max-h-60 overflow-auto p-2">
+                        <div className="max-h-48 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
                             {loading ? (
                                 <div className="py-4 text-center text-gray-400 text-sm">
                                     Cargando mesas...
@@ -142,10 +148,11 @@ export const TableSelector: React.FC<TableSelectorProps> = ({
                                     No hay mesas configuradas
                                 </div>
                             ) : (
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-4 gap-2 pb-4">
                                     {tables.map((table) => {
                                         const isAvailable = table.status === 'available';
                                         const isSelected = selectedTable?.id === table.id;
+                                        const statusColor = STATUS_COLORS[table.status];
 
                                         return (
                                             <button
@@ -158,23 +165,23 @@ export const TableSelector: React.FC<TableSelectorProps> = ({
                                                     }
                                                 }}
                                                 className={`
-                          p-3 rounded-lg text-center transition-all relative
-                          ${isSelected
-                                                        ? 'bg-orange-500 text-white ring-2 ring-orange-300'
+                                                  p-2 rounded-lg text-center transition-all relative flex flex-col items-center justify-center min-h-[55px]
+                                                  ${isSelected
+                                                        ? 'bg-orange-500 text-white shadow ring-2 ring-orange-200'
                                                         : isAvailable
-                                                            ? `${STATUS_COLORS[table.status].bg} text-white hover:opacity-90`
-                                                            : `${STATUS_COLORS[table.status].bg} text-white opacity-50 cursor-not-allowed`
+                                                            ? `${statusColor.bg} text-white shadow-sm hover:opacity-90`
+                                                            : `${statusColor.bg} text-white opacity-30 cursor-not-allowed`
                                                     }
-                        `}
+                                                `}
                                             >
-                                                <div className="font-bold text-sm">{table.name}</div>
-                                                <div className="text-xs opacity-80 flex items-center justify-center gap-1">
-                                                    <Users size={10} /> {table.capacity}
+                                                <div className="font-bold text-[10px] uppercase truncate w-full px-1">{table.name}</div>
+                                                <div className="text-[9px] bg-black/10 px-1.5 rounded-full flex items-center justify-center gap-0.5 font-bold mt-0.5">
+                                                    <Users size={8} /> {table.capacity}
                                                 </div>
 
                                                 {isSelected && (
-                                                    <div className="absolute -top-1 -right-1 bg-white rounded-full p-0.5 shadow">
-                                                        <Check size={12} className="text-orange-600" />
+                                                    <div className="absolute -top-0.5 -right-0.5 bg-white rounded-full p-0.5 shadow-sm">
+                                                        <Check size={10} className="text-orange-600" />
                                                     </div>
                                                 )}
                                             </button>
