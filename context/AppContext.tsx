@@ -25,6 +25,7 @@ interface AppContextType {
   refreshData: () => Promise<void>;
   signOut: () => Promise<void>;
   createOrder: (orderData: any, items: any[]) => Promise<any>;
+  updateOrder: (orderId: string | number, orderData: any, items: any[]) => Promise<any>;
   createCustomer: (customerData: any) => Promise<any>;
   toggleFavorite: (productId: string, currentStatus: boolean) => Promise<void>;
   syncPendingOrders: () => Promise<number>;
@@ -225,7 +226,44 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const { error: itemsErr } = await supabase.from('order_items').insert(orderItems);
     if (itemsErr) throw itemsErr;
 
-    await logAction('VENTA', `Ticket #${order.ticket_number} - $${order.total}`, 'Caja');
+    const typeLabels: Record<string, string> = { local: 'Mesa', takeaway: 'Take Away', delivery: 'Delivery' };
+    const typeLabel = typeLabels[orderData.order_type] || orderData.order_type || '';
+    await logAction('VENTA', `Ticket #${order.ticket_number} - $${order.total} (${typeLabel} · ${orderData.payment_type || 'N/A'})`, 'Caja');
+    await refreshData();
+    return order;
+  };
+
+  const updateOrder = async (orderId: string | number, orderData: any, items: any[]) => {
+    // 1. Actualizar el pedido principal
+    const { data: order, error: orderErr } = await supabase
+      .from('orders')
+      .update(orderData)
+      .eq('id', orderId)
+      .select()
+      .single();
+
+    if (orderErr) throw orderErr;
+
+    // 2. Eliminar items anteriores e insertar los nuevos
+    // (Es la forma más sencilla de manejar ediciones complejas)
+    const { error: delErr } = await supabase
+      .from('order_items')
+      .delete()
+      .eq('order_id', orderId);
+
+    if (delErr) throw delErr;
+
+    const orderItems = items.map(item => ({
+      ...item,
+      order_id: orderId
+    }));
+
+    const { error: itemsErr } = await supabase.from('order_items').insert(orderItems);
+    if (itemsErr) throw itemsErr;
+
+    const typeLabels: Record<string, string> = { local: 'Mesa', takeaway: 'Take Away', delivery: 'Delivery' };
+    const typeLabel = typeLabels[orderData.order_type] || orderData.order_type || '';
+    await logAction('VENTA', `EDITADO: Ticket #${order.ticket_number} - $${order.total} (${typeLabel} · ${orderData.payment_type || 'N/A'})`, 'Caja');
     await refreshData();
     return order;
   };
@@ -348,6 +386,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       refreshData,
       signOut,
       createOrder,
+      updateOrder,
       createCustomer,
       toggleFavorite,
       syncPendingOrders

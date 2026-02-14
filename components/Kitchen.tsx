@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, forwardRef } from 'react';
 import { supabase } from '../services/supabase';
 import { useReactToPrint } from 'react-to-print';
-import { CheckCircle, Clock, RefreshCw, ChefHat, XCircle, Printer } from 'lucide-react';
+import { CheckCircle, Clock, RefreshCw, ChefHat, XCircle, Printer, Edit } from 'lucide-react';
 // IMPORTAMOS EL BOTÓN NUEVO
 import { WhatsAppButton } from './WhatsAppButton';
 
@@ -145,10 +145,11 @@ const KitchenTicket = forwardRef<HTMLDivElement, { order: any; companyName?: str
 interface KitchenProps {
   demoOrders?: any[];
   onDemoComplete?: (id: any) => void;
+  onEditOrder?: (order: any) => void;
   companyName?: string;
 }
 
-export default function Kitchen({ demoOrders = [], onDemoComplete, companyName }: KitchenProps) {
+export default function Kitchen({ demoOrders = [], onDemoComplete, onEditOrder, companyName }: KitchenProps) {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -172,7 +173,9 @@ export default function Kitchen({ demoOrders = [], onDemoComplete, companyName }
             *,
             client:clients(name, phone, address),
             order_items (
+                product_id,
                 quantity,
+                price_at_moment,
                 item_name,
                 notes,
                 product:products(name, category)
@@ -342,24 +345,35 @@ export default function Kitchen({ demoOrders = [], onDemoComplete, companyName }
                 </div>
 
                 {/* Footer Actions */}
-                <div className={`p-3 border-t flex gap-2 ${isDemo ? 'bg-orange-50 border-orange-100' : 'bg-gray-50 border-gray-100'}`}>
+                <div className={`p-2 border-t flex flex-wrap gap-1.5 items-center ${isDemo ? 'bg-orange-50 border-orange-100' : 'bg-gray-50 border-gray-100'}`}>
 
                   {/* BOTÓN IMPRIMIR */}
                   <button
                     onClick={() => onPrintClick(order)}
-                    className="p-3 rounded-lg font-bold border transition-colors flex items-center justify-center bg-gray-100 border-gray-200 text-gray-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                    className="p-2 rounded-lg font-bold border transition-colors flex items-center justify-center flex-shrink-0 bg-gray-100 border-gray-200 text-gray-600 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
                     title="Imprimir Comanda"
                   >
-                    <Printer size={20} />
+                    <Printer size={18} />
                   </button>
+
+                  {/* BOTÓN EDITAR */}
+                  {order.status === 'pendiente' && (
+                    <button
+                      onClick={() => onEditOrder?.(order)}
+                      className="p-2 rounded-lg font-bold border transition-colors flex items-center justify-center flex-shrink-0 bg-amber-50 border-amber-200 text-amber-700 hover:bg-amber-100"
+                      title="Editar Pedido"
+                    >
+                      <Edit size={18} />
+                    </button>
+                  )}
 
                   {/* BOTÓN CANCELAR */}
                   <button
                     onClick={() => handleCancelOrder(order.id)}
-                    className="px-3 rounded-lg font-bold border transition-colors flex items-center justify-center bg-red-100 border-red-200 text-red-700 hover:bg-red-200"
+                    className="p-2 rounded-lg font-bold border transition-colors flex items-center justify-center flex-shrink-0 bg-red-100 border-red-200 text-red-700 hover:bg-red-200"
                     title="Cancelar Pedido"
                   >
-                    <XCircle size={20} />
+                    <XCircle size={18} />
                   </button>
 
                   {/* --- NUEVO BOTÓN WHATSAPP --- */}
@@ -382,9 +396,9 @@ export default function Kitchen({ demoOrders = [], onDemoComplete, companyName }
                   {/* BOTÓN LISTO */}
                   <button
                     onClick={() => handleCompleteOrder(order.id)}
-                    className={`flex-1 py-3 rounded-lg font-bold text-white shadow-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${isDemo ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}
+                    className={`flex-1 min-w-[80px] py-2 rounded-lg font-bold text-white shadow-sm flex items-center justify-center gap-1.5 transition-all active:scale-95 text-sm ${isDemo ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-600 hover:bg-green-700'}`}
                   >
-                    <CheckCircle size={18} /> {isDemo ? 'Despachar' : 'Listo'}
+                    <CheckCircle size={16} /> {isDemo ? 'Despachar' : 'Listo'}
                   </button>
                 </div>
               </div>

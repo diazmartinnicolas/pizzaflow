@@ -22,12 +22,14 @@ interface TableSelectorProps {
     onSelectTable: (table: Table | null) => void;
 }
 
-const STATUS_COLORS: Record<TableStatus, { bg: string; text: string; border: string }> = {
+const STATUS_COLORS: Record<string, { bg: string; text: string; border: string }> = {
     available: { bg: 'bg-green-500', text: 'text-green-700', border: 'border-green-500' },
     occupied: { bg: 'bg-blue-500', text: 'text-blue-700', border: 'border-blue-500' },
     reserved: { bg: 'bg-purple-500', text: 'text-purple-700', border: 'border-purple-500' },
     unavailable: { bg: 'bg-amber-400', text: 'text-amber-700', border: 'border-amber-400' },
 };
+
+const DEFAULT_STATUS_COLOR = { bg: 'bg-gray-400', text: 'text-gray-600', border: 'border-gray-400' };
 
 // ============================================================
 // COMPONENTE
@@ -90,13 +92,13 @@ export const TableSelector: React.FC<TableSelectorProps> = ({
                 className={`
           flex items-center justify-between gap-2 p-3 rounded-xl border-2 cursor-pointer transition-all
           ${selectedTable
-                        ? `bg-blue-50 ${STATUS_COLORS[selectedTable.status].border}`
+                        ? `bg-blue-50 ${(STATUS_COLORS[selectedTable.status] || DEFAULT_STATUS_COLOR).border}`
                         : 'bg-white border-gray-200 hover:border-orange-300'
                     }
         `}
             >
                 <div className="flex items-center gap-2">
-                    <LayoutGrid size={18} className={selectedTable ? STATUS_COLORS[selectedTable.status].text : 'text-gray-400'} />
+                    <LayoutGrid size={18} className={selectedTable ? (STATUS_COLORS[selectedTable.status] || DEFAULT_STATUS_COLOR).text : 'text-gray-400'} />
                     {selectedTable ? (
                         <span className="font-bold text-gray-800">
                             {selectedTable.name}
@@ -152,7 +154,7 @@ export const TableSelector: React.FC<TableSelectorProps> = ({
                                     {tables.map((table) => {
                                         const isAvailable = table.status === 'available';
                                         const isSelected = selectedTable?.id === table.id;
-                                        const statusColor = STATUS_COLORS[table.status];
+                                        const statusColor = STATUS_COLORS[table.status] || DEFAULT_STATUS_COLOR;
 
                                         return (
                                             <button

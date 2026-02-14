@@ -6,7 +6,8 @@ import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import {
     Plus, Trash2, Save, LayoutGrid, Edit, X,
-    Users, Move, Eye, Settings, RefreshCw, Receipt, DollarSign, ShoppingCart
+    Users, Move, Eye, Settings, RefreshCw, Receipt, DollarSign, ShoppingCart,
+    CreditCard, Banknote, Smartphone
 } from 'lucide-react';
 
 // ============================================================
@@ -134,6 +135,7 @@ export default function TableLayout({ onAddProducts }: TableLayoutProps) {
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [tableOrder, setTableOrder] = useState<any>(null); // Pedido de la mesa seleccionada
     const [loadingOrder, setLoadingOrder] = useState(false);
+    const [showPaymentSelector, setShowPaymentSelector] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const dragOffset = useRef({ x: 0, y: 0 });
 
@@ -393,8 +395,8 @@ export default function TableLayout({ onAddProducts }: TableLayoutProps) {
         handlePrintTicket();
     };
 
-    // Liberar mesa - solo cambia estado (el ticket ya se imprimió al confirmar)
-    const handleReleaseTable = async () => {
+    // Liberar mesa - cambia estado y registra método de pago
+    const handleReleaseTable = async (paymentMethod: string) => {
         if (!selectedTable) return;
 
         try {
@@ -407,11 +409,14 @@ export default function TableLayout({ onAddProducts }: TableLayoutProps) {
                 })
                 .eq('id', selectedTable.id);
 
-            // Si hay un pedido asociado, marcarlo como completado
+            // Si hay un pedido asociado, marcarlo como completado y guardar método de pago
             if (selectedTable.current_order_id) {
                 await supabase
                     .from('orders')
-                    .update({ status: 'completed' })
+                    .update({
+                        status: 'completed',
+                        payment_type: paymentMethod
+                    })
                     .eq('id', selectedTable.current_order_id);
             }
 
@@ -421,10 +426,17 @@ export default function TableLayout({ onAddProducts }: TableLayoutProps) {
                     : t
             ));
 
-            toast.success(`${selectedTable.name} liberada`);
+            const methodLabels: Record<string, string> = {
+                efectivo: 'Efectivo',
+                tarjeta: 'Tarjeta',
+                transferencia: 'Transferencia',
+                mercadopago: 'MercadoPago'
+            };
+            toast.success(`${selectedTable.name} cobrada (${methodLabels[paymentMethod] || paymentMethod}) y liberada`);
             setShowEditModal(false);
             setSelectedTable(null);
             setTableOrder(null);
+            setShowPaymentSelector(false);
         } catch (err) {
             console.error('Error liberando mesa:', err);
             toast.error('Error al liberar mesa');
@@ -750,20 +762,53 @@ export default function TableLayout({ onAddProducts }: TableLayoutProps) {
                                                     <ShoppingCart size={18} /> Agregar Productos
                                                 </button>
                                             )}
-                                            <div className="flex gap-2">
-                                                <button
-                                                    onClick={() => { setShowEditModal(false); setSelectedTable(null); }}
-                                                    className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl transition-colors"
-                                                >
-                                                    Cerrar
-                                                </button>
-                                                <button
-                                                    onClick={handleReleaseTable}
-                                                    className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
-                                                >
-                                                    <DollarSign size={18} /> Liberar Mesa
-                                                </button>
-                                            </div>
+                                            {/* Selector de método de pago */}
+                                            {showPaymentSelector ? (
+                                                <div className="border-2 border-green-200 rounded-xl p-3 bg-green-50">
+                                                    <p className="text-sm font-bold text-green-800 mb-2 text-center">¿Cómo abona el cliente?</p>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        <button
+                                                            onClick={() => handleReleaseTable('efectivo')}
+                                                            className="flex items-center justify-center gap-2 p-3 rounded-lg bg-green-600 hover:bg-green-700 text-white font-bold transition-colors text-sm"
+                                                        >
+                                                            <Banknote size={18} /> Efectivo
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleReleaseTable('tarjeta')}
+                                                            className="flex items-center justify-center gap-2 p-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors text-sm"
+                                                        >
+                                                            <CreditCard size={18} /> Tarjeta
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleReleaseTable('transferencia')}
+                                                            className="flex items-center justify-center gap-2 p-3 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-bold transition-colors text-sm"
+                                                        >
+                                                            <Smartphone size={18} /> Transfer.
+                                                        </button>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setShowPaymentSelector(false)}
+                                                        className="w-full mt-2 text-xs text-gray-500 hover:text-gray-700 py-1"
+                                                    >
+                                                        Cancelar
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="flex gap-2">
+                                                    <button
+                                                        onClick={() => { setShowEditModal(false); setSelectedTable(null); setShowPaymentSelector(false); }}
+                                                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold py-3 rounded-xl transition-colors"
+                                                    >
+                                                        Cerrar
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setShowPaymentSelector(true)}
+                                                        className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-xl transition-colors flex items-center justify-center gap-2"
+                                                    >
+                                                        <DollarSign size={18} /> Cobrar y Liberar
+                                                    </button>
+                                                </div>
+                                            )}
                                         </>
                                     ) : (
                                         <>

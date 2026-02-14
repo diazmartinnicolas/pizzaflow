@@ -102,10 +102,16 @@ function App() {
 
   // Estado para mesa seleccionada desde el salón (para agregar productos)
   const [tableForPOS, setTableForPOS] = useState<any>(null);
+  const [orderToEdit, setOrderToEdit] = useState<any>(null);
 
   // Función para navegar al POS con una mesa
   const handleAddProductsToTable = (table: any, existingOrder: any) => {
     setTableForPOS({ table, existingOrder });
+    setActiveTab('pos');
+  };
+
+  const handleEditOrder = (order: any) => {
+    setOrderToEdit(order);
     setActiveTab('pos');
   };
 
@@ -332,13 +338,16 @@ function App() {
                   isDemo={auth.isDemo}
                   onDemoOrder={handleDemoOrder}
                   initialTable={tableForPOS}
+                  editingOrder={orderToEdit}
                   onTableProcessed={() => setTableForPOS(null)}
+                  onEditProcessed={() => setOrderToEdit(null)}
                 />
               )}
               {activeTab === 'kitchen' && (
                 <Kitchen
                   demoOrders={demoOrders}
                   onDemoComplete={id => setDemoOrders(prev => prev.filter(o => o.id !== id))}
+                  onEditOrder={handleEditOrder}
                   companyName={auth.companyName}
                 />
               )}
