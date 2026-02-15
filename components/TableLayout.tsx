@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, forwardRef } from 'react';
 import { useReactToPrint } from 'react-to-print';
 import { supabase } from '../services/supabase';
+import { printOrder } from '../services/printService';
 import { useApp } from '../context/AppContext';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
@@ -389,10 +390,20 @@ export default function TableLayout({ onAddProducts }: TableLayoutProps) {
         }
     };
 
-    // Generar e imprimir ticket usando react-to-print (igual que cocina)
-    const printTableTicket = () => {
+    // Generar e imprimir ticket
+    const printTableTicket = async () => {
         if (!tableOrder || !selectedTable) return;
-        handlePrintTicket();
+
+        const printed = await printOrder({
+            ...tableOrder,
+            companyName: userProfile?.companies?.name || 'FLUXO',
+            table: selectedTable,
+        });
+
+        if (!printed) {
+            // Fallback: impresión del navegador
+            handlePrintTicket();
+        }
     };
 
     // Liberar mesa - cambia estado y registra método de pago

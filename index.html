@@ -1,41 +1,64 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta name="description" content="Sistema de Gestión Gastronómica Multi-Tenant. Punto de Venta, Cocina KDS y Administración en tiempo real." />
 
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="Fluxo - Gestión Gastronómica Inteligente" />
-    <meta property="og:description" content="Prueba el modo Demo interactivo: Comandas en tiempo real, gestión de roles y arquitectura multi-tenant." />
-    <meta property="og:url" content="https://fluxo-app-nu.vercel.app/" />
-    
-    <title>Fluxo</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <style>
-      body {
-        font-family: 'Inter', sans-serif;
-        background-color: #f8fafc;
-      }
-      /* Custom Scrollbar for better aesthetics */
-      ::-webkit-scrollbar {
-        width: 8px;
-        height: 8px;
-      }
-      ::-webkit-scrollbar-track {
-        background: #f1f1f1; 
-      }
-      ::-webkit-scrollbar-thumb {
-        background: #cbd5e1; 
-        border-radius: 4px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: #94a3b8; 
-      }
-    </style>
-<link rel="stylesheet" href="/index.css">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="description"
+    content="Sistema de Gestión Gastronómica Multi-Tenant. Punto de Venta, Cocina KDS y Administración en tiempo real." />
+  <meta name="theme-color" content="#ea580c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Fluxo - Gestión Gastronómica Inteligente" />
+  <meta property="og:description"
+    content="Prueba el modo Demo interactivo: Comandas en tiempo real, gestión de roles y arquitectura multi-tenant." />
+  <meta property="og:url" content="https://fluxo-app-nu.vercel.app/" />
+
+  <title>Fluxo</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3595/3595458.png" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f8fafc;
+    }
+
+    /* Custom Scrollbar for better aesthetics */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+  <link rel="stylesheet" href="/index.css">
 </head>
-  <body>
-    <div id="root"></div>
+
+<body>
+  <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(() => { });
+      });
+    }
+  </script>
 </body>
+
 </html>

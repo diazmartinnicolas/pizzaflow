@@ -1,0 +1,29 @@
+{
+    "short_name": "Fluxo",
+    "name": "Fluxo - Gestión Gastronómica",
+    "description": "Sistema POS para restaurantes. Punto de venta, cocina KDS, mesas y reportes.",
+    "icons": [
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/3595/3595458.png",
+            "type": "image/png",
+            "sizes": "192x192",
+            "purpose": "any maskable"
+        },
+        {
+            "src": "https://cdn-icons-png.flaticon.com/512/3595/3595458.png",
+            "type": "image/png",
+            "sizes": "512x512",
+            "purpose": "any maskable"
+        }
+    ],
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "orientation": "any",
+    "theme_color": "#ea580c",
+    "background_color": "#f8fafc",
+    "categories": [
+        "business",
+        "productivity"
+    ]
+}

@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, forwardRef } from 'react';
 import { supabase } from '../services/supabase';
+import { printOrder } from '../services/printService';
 import { useReactToPrint } from 'react-to-print';
 import { CheckCircle, Clock, RefreshCw, ChefHat, XCircle, Printer, Edit } from 'lucide-react';
 // IMPORTAMOS EL BOTÓN NUEVO
@@ -232,11 +233,18 @@ export default function Kitchen({ demoOrders = [], onDemoComplete, onEditOrder, 
   };
 
   // Función trigger de impresión
-  const onPrintClick = (order: any) => {
-    setPrintingOrder(order);
-    setTimeout(() => {
-      handlePrint();
-    }, 100);
+  const onPrintClick = async (order: any) => {
+    // Intentar imprimir via print-server (red)
+    const printed = await printOrder({
+      ...order,
+      companyName: 'FLUXO',
+    });
+
+    if (!printed) {
+      // Fallback: impresión del navegador
+      setPrintingOrder(order);
+      setTimeout(() => handlePrint(), 100);
+    }
   };
 
   // --- MERGE DE DATOS ---

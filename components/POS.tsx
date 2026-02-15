@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { ShoppingCart, Tag, Receipt, X, Printer } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '../services/supabase';
+import { printOrder } from '../services/printService';
 import { useReactToPrint } from 'react-to-print';
 
 // Contextos
@@ -549,13 +550,9 @@ const POS: React.FC<POSProps> = ({
         };
 
         try {
-          const printResponse = await fetch('http://localhost:3001/print', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(fullOrderForPrint)
-          });
+          const printed = await printOrder(fullOrderForPrint);
 
-          if (printResponse.ok) {
+          if (printed) {
             toast.success('🖨️ Ticket enviado a impresora');
           } else {
             setPrintingOrder(fullOrderForPrint);
