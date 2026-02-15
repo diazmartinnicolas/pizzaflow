@@ -856,8 +856,19 @@ const POS: React.FC<POSProps> = ({
           ${mobileView === 'products' ? 'hidden md:flex' : 'flex'}
         `}
       >
-        {/* Selector de Cliente */}
-        <div className="p-4 border-b bg-gray-50">
+        {/* Selector de Cliente + Header del carrito */}
+        <div className="p-3 border-b bg-gray-50">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+              <ShoppingCart size={16} className="text-orange-500" />
+              Orden Actual
+              {cart.length > 0 && (
+                <span className="text-[10px] bg-orange-100 text-orange-600 px-1.5 py-0.5 rounded-full">
+                  {cart.length}
+                </span>
+              )}
+            </h2>
+          </div>
           <CustomerSelector
             customers={customers}
             selectedCustomer={customerSelector.selectedCustomer}
@@ -882,25 +893,12 @@ const POS: React.FC<POSProps> = ({
           </div>
         </div>
 
-        {/* Header del carrito */}
-        <div className="p-4 border-b border-gray-100 bg-white">
-          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-            <ShoppingCart size={20} className="text-orange-500" />
-            Orden Actual
-            {cart.length > 0 && (
-              <span className="text-xs bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">
-                {cart.length}
-              </span>
-            )}
-          </h2>
-        </div>
-
         {/* Lista de items */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {cart.length === 0 ? (
-            <div className="text-center py-20 text-gray-300">
-              <ShoppingCart className="mx-auto opacity-20 mb-2" size={40} />
-              <p>Nada por aquí</p>
+            <div className="text-center py-10 text-gray-300">
+              <ShoppingCart className="mx-auto opacity-20 mb-1" size={32} />
+              <p className="text-sm">Nada por aquí</p>
             </div>
           ) : (
             groupedCart.map((item: any) => (
@@ -935,39 +933,45 @@ const POS: React.FC<POSProps> = ({
         )}
 
         {/* Footer: Pago y Total */}
-        <div className="p-3 border-t border-gray-100 bg-gray-50 space-y-3">
-          {/* Selector de tipo de pedido */}
-          <div>
-            <p className="text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Tipo de Pedido</p>
-            <OrderTypeSelector
-              selected={orderType}
-              onChange={(type) => {
-                setOrderType(type);
-                if (type !== 'delivery') {
-                  setDeliveryInfo({ address: '', phone: '', notes: '' });
-                }
-                if (type !== 'local') {
-                  setSelectedTable(null);
-                }
-              }}
-            />
+        <div className="p-2.5 lg:p-3 border-t border-gray-100 bg-gray-50 space-y-2">
+          {/* Fila 1: Tipo de pedido + Método de pago lado a lado */}
+          <div className="flex gap-2 items-start">
+            <div className="flex-1">
+              <p className="text-[9px] font-bold text-gray-400 mb-1 uppercase tracking-tight">Pedido</p>
+              <OrderTypeSelector
+                selected={orderType}
+                onChange={(type) => {
+                  setOrderType(type);
+                  if (type !== 'delivery') {
+                    setDeliveryInfo({ address: '', phone: '', notes: '' });
+                  }
+                  if (type !== 'local') {
+                    setSelectedTable(null);
+                  }
+                }}
+              />
+            </div>
+            <div className="flex-1">
+              <p className="text-[9px] font-bold text-gray-400 mb-1 uppercase tracking-tight">Pago</p>
+              <PaymentMethodSelector
+                selected={paymentMethod}
+                onChange={setPaymentMethod}
+              />
+            </div>
           </div>
 
           {/* Selector de Mesa (solo visible si es tipo local/mesa) */}
           {orderType === 'local' && (
-            <div>
-              <p className="text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-tight">Seleccionar Mesa</p>
-              <TableSelector
-                selectedTable={selectedTable}
-                onSelectTable={setSelectedTable}
-              />
-            </div>
+            <TableSelector
+              selectedTable={selectedTable}
+              onSelectTable={setSelectedTable}
+            />
           )}
 
           {/* Información de envío EDITABLE para Delivery */}
           {orderType === 'delivery' && (
-            <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 mb-2 space-y-2">
-              <p className="text-xs font-bold text-orange-800 flex items-center gap-1">
+            <div className="bg-orange-50 p-2 rounded-lg border border-orange-100 space-y-1.5">
+              <p className="text-[10px] font-bold text-orange-800 flex items-center gap-1">
                 📍 Envío a:
               </p>
               <input
@@ -975,66 +979,55 @@ const POS: React.FC<POSProps> = ({
                 placeholder="Dirección de entrega..."
                 value={deliveryInfo.address}
                 onChange={(e) => setDeliveryInfo({ ...deliveryInfo, address: e.target.value })}
-                className="w-full p-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                className="w-full p-1.5 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
               />
               <input
                 type="tel"
                 placeholder="Teléfono..."
                 value={deliveryInfo.phone}
                 onChange={(e) => setDeliveryInfo({ ...deliveryInfo, phone: e.target.value })}
-                className="w-full p-2 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                className="w-full p-1.5 text-sm border border-orange-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
               />
             </div>
           )}
 
-          {/* Selector de método de pago */}
-          <PaymentMethodSelector
-            selected={paymentMethod}
-            onChange={setPaymentMethod}
-          />
-
-          {/* Totales */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-sm text-gray-500">
-              <span>Subtotal</span>
-              <span>{formatPrice(totals.subtotal)}</span>
-            </div>
-            {totals.totalDiscount > 0 && (
-              <div className="flex justify-between text-sm text-green-600 font-medium">
-                <span>Descuento</span>
-                <span>- {formatPrice(totals.totalDiscount)}</span>
+          {/* Totales + Botón */}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex-1">
+              {totals.totalDiscount > 0 && (
+                <div className="flex justify-between text-xs text-green-600 font-medium">
+                  <span>Dto.</span>
+                  <span>- {formatPrice(totals.totalDiscount)}</span>
+                </div>
+              )}
+              <div className="flex items-baseline justify-between">
+                <span className="text-gray-600 font-semibold text-sm">Total</span>
+                <span className="text-xl font-bold text-orange-600">
+                  {formatPrice(totals.finalTotal)}
+                </span>
               </div>
-            )}
-            <div className="flex justify-between pt-2 border-t border-gray-200">
-              <span className="text-gray-900 font-bold text-lg">Total</span>
-              <span className="text-2xl font-bold text-orange-600">
-                {formatPrice(totals.finalTotal)}
-              </span>
             </div>
+            <Button
+              variant="primary"
+              size="md"
+              isLoading={isProcessing}
+              disabled={
+                cart.length === 0 ||
+                (orderType === 'delivery' && !deliveryInfo.address)
+              }
+              onClick={() => handleCheckout(true)}
+              className="flex items-center gap-1.5 px-4 py-2.5 h-auto text-sm whitespace-nowrap"
+            >
+              <Printer size={15} />
+              {isProcessing ? 'Procesando...' : 'Confirmar'}
+            </Button>
           </div>
-
-          {/* Botón Confirmar e Imprimir */}
-          <Button
-            variant="primary"
-            size="md"
-            fullWidth
-            isLoading={isProcessing}
-            disabled={
-              cart.length === 0 ||
-              (orderType === 'delivery' && !deliveryInfo.address)
-            }
-            onClick={() => handleCheckout(true)}
-            className="flex items-center justify-center gap-2 py-2.5 h-auto text-sm"
-          >
-            <Printer size={16} />
-            {isProcessing ? 'Procesando...' : 'Confirmar Pedido'}
-          </Button>
 
           {/* Botón volver (móvil) */}
           {mobileView === 'cart' && (
             <button
               onClick={() => setMobileView('products')}
-              className="w-full py-2 text-gray-500 font-medium"
+              className="w-full py-1.5 text-gray-500 font-medium text-sm"
             >
               Volver a productos
             </button>
